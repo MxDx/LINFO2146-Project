@@ -45,7 +45,7 @@
       <mote>
         <interface_config>
           org.contikios.cooja.interfaces.Position
-          <pos x="75.11205075707505" y="72.68778793391368" />
+          <pos x="78.44022363234207" y="77.34722995928749" />
         </interface_config>
         <interface_config>
           org.contikios.cooja.mspmote.interfaces.MspMoteID
@@ -100,7 +100,7 @@
       <skin>org.contikios.cooja.plugins.skins.GridVisualizerSkin</skin>
       <skin>org.contikios.cooja.plugins.skins.TrafficVisualizerSkin</skin>
       <skin>org.contikios.cooja.plugins.skins.UDGMVisualizerSkin</skin>
-      <viewport>6.230445585954247 0.0 0.0 6.230445585954247 -246.78160730530962 -162.6045802129036</viewport>
+      <viewport>3.004651613596763 0.0 0.0 3.004651613596763 -11.601469572390894 76.89285290658579</viewport>
     </plugin_config>
     <bounds x="1" y="1" height="602" width="400" />
   </plugin>
