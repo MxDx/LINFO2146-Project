@@ -14,35 +14,36 @@
 
 /* Configuration */
 #define SEND_INTERVAL (8 * CLOCK_SECOND)
+#define MAX_LIGHT_INTENSITY 255
 
 /*---------------------------------------------------------------------------*/
-PROCESS(node_process, "Node process");
-AUTOSTART_PROCESSES(&node_process);
+PROCESS(light_sensor_process, "Light sensor process");
+AUTOSTART_PROCESSES(&light_sensor_process);
 
+// Function to generate random light intensity
+int generate_light_intensity() {
+    return rand() % (MAX_LIGHT_INTENSITY + 1);
+}
 
 /*---------------------------------------------------------------------------*/
 void input_callback(const void *data, uint16_t len,
   const linkaddr_t *src, const linkaddr_t *dest)
 {
-  LOG_INFO("Received packet\n");
   uint8_t* packet_type = malloc(sizeof(uint8_t));
   process_node_packet(data, len, src, dest, packet_type); 
+  LOG_INFO("Received packet\n");
 
   if (*packet_type == DATA) {
     LOG_INFO("Received data packet\n");
   } 
-
 }
 
 /*---------------------------------------------------------------------------*/
-PROCESS_THREAD(node_process, ev, data)
+PROCESS_THREAD(light_sensor_process, ev, data)
 {
   static struct etimer periodic_timer;
-
   parent = malloc(sizeof(parent_t));
   setup = 0;
-
-  LOG_INFO("Setup value at start: %u\n", setup);
 
   PROCESS_BEGIN();
 
@@ -53,21 +54,29 @@ PROCESS_THREAD(node_process, ev, data)
   etimer_set(&periodic_timer_setup, SEND_INTERVAL);
   while (not_setup()) {
     etimer_reset(&periodic_timer_setup);
-    LOG_INFO("Setup value: %u\n", setup);
     init_node();
-    LOG_INFO("Waiting for setup\n");
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer_setup));
   }
-
-  LOG_INFO("Setup done\n");
 
   etimer_set(&periodic_timer, SEND_INTERVAL);
   while(1) {
     etimer_reset(&periodic_timer);
-    LOG_INFO("Running....\n");
+    // Sending random light sensor data
+    char* topic = "light";
+    uint16_t len_topic = strlen(topic);
+
+    uint8_t light_intensity = generate_light_intensity();
+    // Turn the light intensity into a string
+    char* light_intensity_str = malloc(sizeof(char) * 4);
+    sprintf(light_intensity_str, "%d", light_intensity);
+    uint16_t len_data = strlen(light_intensity_str);
+
+    send_data_packet(len_topic, len_data, topic, light_intensity_str);    
+    LOG_INFO("Packet sent\n");
+
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
   }
-  LOG_INFO("Node process ended\n");
+  LOG_INFO("Light sensor process ended\n");
 
   PROCESS_END();
 }
