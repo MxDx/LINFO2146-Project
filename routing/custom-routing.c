@@ -16,7 +16,7 @@ void init_node() {
   LOG_INFO("To: ");
   LOG_INFO_LLADDR(NULL);
   LOG_INFO_("\n");
-  control_packet_send(NODE, NULL, SETUP);
+  control_packet_send(NODE, NULL, SETUP, 0);
 }
 
 void init_gateway() {
@@ -24,17 +24,48 @@ void init_gateway() {
   LOG_INFO("To: ");
   LOG_INFO_LLADDR(NULL);
   LOG_INFO_("\n");
-  control_packet_send(GATEWAY, NULL, SETUP);
+  control_packet_send(GATEWAY, NULL, SETUP, 0);
 }
 
-void control_packet_send(uint8_t node_type, const linkaddr_t* dest, uint8_t response_type) {
-  control_packet_t control_packet;
-  control_packet.type = CONTROL << 7;
-  control_packet.type |= node_type << 6;
-  control_packet.type |= response_type << 4;
+void build_control_header(control_header_t* control_header, uint8_t node_type, uint8_t response_type) {
+  control_header->type = CONTROL;
+  control_header->node_type = node_type;
+  control_header->response_type = response_type;
+}
 
-  nullnet_buf = (uint8_t *)&control_packet;
-  nullnet_len = sizeof(control_packet);
+void packing_control_packet(control_packet_t* control_packet, uint8_t* data) {
+  data[0] = control_packet->header->type << 7;
+  data[0] |= control_packet->header->node_type << 6; 
+  data[0] |= control_packet->header->response_type << 4;
+
+  /* Setting the rest of the data to be the control_packet->data pointer */
+  data[1] = control_packet->data;
+}
+
+void process_control_header(const void *data, uint16_t len, control_header_t* control_header) {
+  if (len == 0) {
+    return;
+  }
+
+  uint8_t header = ((uint8_t *)data)[0];
+  control_header->type = header >> 7;
+  control_header->node_type = (header >> 6) & 0b1;
+  control_header->response_type = (header >> 4) & 0b1;
+}
+
+void control_packet_send(uint8_t node_type, const linkaddr_t* dest, uint8_t response_type, uint16_t len_of_data) {
+  control_packet_t* control_packet = malloc(sizeof(control_packet_t));
+  control_header_t* header = malloc(sizeof(control_header_t));
+  build_control_header(header, node_type, response_type);
+  control_packet->header = header;
+  LOG_INFO("Sending control packet\n");
+  LOG_INFO("Node type: %u\n", header->node_type);
+  LOG_INFO("Response type: %u\n", header->response_type);
+
+  uint8_t* data = malloc(sizeof(uint8_t)*(len_of_data + 1));  
+  packing_control_packet(control_packet, data);
+  nullnet_buf = (uint8_t *)data;
+  nullnet_len = sizeof(data);
 
   NETSTACK_NETWORK.output(dest);
 }
@@ -86,30 +117,37 @@ void process_node_packet(const void *data, uint16_t len, const linkaddr_t *src, 
     return;
   }
 
-  uint8_t header = ((uint8_t *)data)[0];
-  *packet_type = header >> 7;
+  uint8_t head = ((uint8_t *)data)[0];
+  *packet_type = head >> 7;
   LOG_INFO("Packet type: %u\n", *packet_type);
 
   if (*packet_type == CONTROL) {
     LOG_INFO("Received control packet\n");
-    uint8_t node_type = (header >> 6) & 0b1;
-    uint8_t response_type = (header >> 4) & 0b1;
+    control_header_t* header = malloc(sizeof(control_header_t));
+    process_control_header(data, len, header);
+    LOG_INFO("Node type: %u\n", header->node_type);
+    LOG_INFO("Response type: %u\n", header->response_type);
+
+    if (header->node_type == GATEWAY) {
+      check_parent_node(src, header->node_type, parent_addr);
+      return;
+    }
 
     /* Sending back a control packet to the source
      * if setup is not done
     */
-    if (!not_setup() && response_type == SETUP) {
+    if (!not_setup() && header->response_type == SETUP) {
       LOG_INFO("Sending response control packet\n");
-      control_packet_send(NODE, src, RESPONSE);
+      control_packet_send(NODE, src, RESPONSE, 0);
       return;
     }
 
-    if (response_type == SETUP) {
+    if (header->response_type == SETUP) {
       LOG_INFO("Ignoring packet, node not setup\n");
       return;
     }
 
-    check_parent_node(src, node_type, parent_addr);
+    check_parent_node(src, header->node_type, parent_addr);
   }
 }
 
@@ -118,13 +156,13 @@ void process_gateway_packet(const void *data, uint16_t len, const linkaddr_t *sr
     return;
   }
 
-  uint8_t header = ((uint8_t *)data)[0];
-  *packet_type = header >> 7;
+  uint8_t head = ((uint8_t *)data)[0];
+  *packet_type = head >> 7;
   LOG_INFO("Packet type: %u\n", *packet_type);
 
   if (*packet_type == CONTROL) {
     LOG_INFO("Received control packet\n");
     LOG_INFO("Sending back a control packet\n");
-    control_packet_send(GATEWAY, src, RESPONSE);
+    control_packet_send(GATEWAY, src, RESPONSE, 0);
   }
 }
