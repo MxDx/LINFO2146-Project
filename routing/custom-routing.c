@@ -258,7 +258,7 @@ void process_node_packet(const void *data, uint16_t len, const linkaddr_t *src, 
     LOG_INFO("Node type: %u\n", header->node_type);
     LOG_INFO("Response type: %u\n", header->response_type);
 
-    if (header->node_type == SUB_GATEWAY) {
+    if (header->node_type == SUB_GATEWAY && header->response_type == RESPONSE) {
       check_parent_node(src, header->node_type, parent);
       return;
     }
@@ -310,7 +310,7 @@ void process_sub_gateway_packet(const void *data, uint16_t len, const linkaddr_t
     LOG_INFO("Node type: %u\n", header->node_type);
     LOG_INFO("Response type: %u\n", header->response_type);
 
-    if (not_setup() && header->response_type == SETUP && header->node_type == GATEWAY) {
+    if (not_setup() && header->response_type == RESPONSE && header->node_type == GATEWAY) {
       set_parent(src, header->node_type, cc2420_last_rssi);
       LOG_INFO("Setting up the gateway\n");
       setup = 1;
