@@ -12,10 +12,8 @@ parent_t* get_parent() {
 
 void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi) {
   linkaddr_copy(parent->parent_addr, parent_addr);
-  //parent->type = type;
-  //parent->rssi = rssi;
-  //memcpy(&parent->rssi, &rssi, sizeof(signed char));
-  //memcpy(&parent->type, &type, sizeof(uint8_t));
+  type_parent = type;
+  parent->rssi = rssi;
 
   LOG_INFO("Parent address: ");
   LOG_INFO_LLADDR(parent_addr);
@@ -128,6 +126,18 @@ void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* 
   LOG_INFO_("\n");
   NETSTACK_NETWORK.output(dest);
 }
+
+void forward_data_packet(const void *data, uint16_t len) {
+  LOG_INFO("Forwarding data packet\n");
+  nullnet_buf = (uint8_t *)data;
+  nullnet_len = len;
+
+  const linkaddr_t* dest = parent->parent_addr;
+  LOG_INFO("Forwarding data packet to: ");
+  LOG_INFO_LLADDR(dest);
+  LOG_INFO_("\n");
+  NETSTACK_NETWORK.output(dest);
+}
 /*---------------------------------------------------------------------------*/
 
 
@@ -185,6 +195,7 @@ void control_packet_send(uint8_t node_type, const linkaddr_t* dest, uint8_t resp
 void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* parent_addr) {
   /* Create new possible parent */
   signed char rssi = cc2420_last_rssi;
+  LOG_INFO("type_parent: %u\n", type_parent);
 
   if (parent_addr == NULL) {
     setup = 1;
@@ -203,7 +214,7 @@ void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* paren
 
   /* If the new parent is the same as the current one */
   if (
-      parent_addr->type == node_type &&
+      type_parent == node_type &&
       parent_addr->rssi < rssi
       ) 
   {
@@ -254,6 +265,13 @@ void process_node_packet(const void *data, uint16_t len, const linkaddr_t *src, 
     }
 
     check_parent_node(src, header->node_type, parent);
+    return;
+  }
+
+  if (*packet_type == DATA) {
+    LOG_INFO("Forwarding data packet\n");
+    forward_data_packet(data, len);
+    return;
   }
 }
 

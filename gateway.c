@@ -47,6 +47,7 @@ PROCESS_THREAD(gateway_process, ev, data)
 
   parent = malloc(sizeof(parent_t));
   setup = 0;
+  type_parent = GATEWAY;
 
   PROCESS_BEGIN();
 

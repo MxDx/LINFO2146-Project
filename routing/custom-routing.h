@@ -22,13 +22,15 @@
 /* Structure for parent nodes
     - parent_addr: address of the parent node
     - rssi: signal strength of the parent node
-    - type: type of the parent node
+    - type: type of the parent node /!\ UNUSED
+            it does not work with it (for some reason)
 */
 typedef struct {
     linkaddr_t* parent_addr;
     signed char rssi;
     uint8_t type;
 } parent_t;
+
 
 /* Structure for control headers
     - type: type of the packet
@@ -74,6 +76,7 @@ typedef struct {
 
 static parent_t* parent;
 static uint8_t setup = 0;
+static uint8_t type_parent = 0;
 
 /* Routing functions */ 
 /*---------------------------------------------------------------------------*/
@@ -132,6 +135,14 @@ void build_data_header(data_packet_t* data_packet, uint16_t len_topic, uint16_t 
  * @param data_packet data packet pointer to store the header
  */
 void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t* data_packet);
+
+/**
+ * @brief Forward a data packet to the parent node
+ * 
+ * @param data data of the packet
+ * @param len length of the data
+ */
+void forward_data_packet(const void *data, uint16_t len);
 
 /**
  * @brief Send a data packet to the parent node

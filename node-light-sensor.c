@@ -32,10 +32,6 @@ void input_callback(const void *data, uint16_t len,
   uint8_t* packet_type = malloc(sizeof(uint8_t));
   process_node_packet(data, len, src, dest, packet_type); 
   LOG_INFO("Received packet\n");
-
-  if (*packet_type == DATA) {
-    LOG_INFO("Received data packet\n");
-  } 
 }
 
 /*---------------------------------------------------------------------------*/
@@ -44,6 +40,7 @@ PROCESS_THREAD(light_sensor_process, ev, data)
   static struct etimer periodic_timer;
   parent = malloc(sizeof(parent_t));
   setup = 0;
+  type_parent = NODE;
 
   PROCESS_BEGIN();
 

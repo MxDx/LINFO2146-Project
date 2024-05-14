@@ -27,11 +27,6 @@ void input_callback(const void *data, uint16_t len,
   LOG_INFO("Received packet\n");
   uint8_t* packet_type = malloc(sizeof(uint8_t));
   process_node_packet(data, len, src, dest, packet_type); 
-
-  if (*packet_type == DATA) {
-    LOG_INFO("Received data packet\n");
-  } 
-
 }
 
 /*---------------------------------------------------------------------------*/
@@ -41,6 +36,7 @@ PROCESS_THREAD(node_process, ev, data)
 
   parent = malloc(sizeof(parent_t));
   setup = 0;
+  type_parent = NODE;
 
   LOG_INFO("Setup value at start: %u\n", setup);
 
