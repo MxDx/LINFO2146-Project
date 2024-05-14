@@ -54,7 +54,6 @@
 
 /* Configuration */
 #define SEND_INTERVAL (8 * CLOCK_SECOND)
-uint8_t setup = 0;
 
 /*---------------------------------------------------------------------------*/
 PROCESS(nullnet_example_process, "NullNet broadcast example");
@@ -64,50 +63,15 @@ AUTOSTART_PROCESSES(&nullnet_example_process);
 
 /*---------------------------------------------------------------------------*/
 
-
-void control_packet_send(const linkaddr_t* dest, uint8_t response_type) {
-  control_packet_t control_packet;
-  control_packet.type = CONTROL << 7;
-  control_packet.type |= GATEWAY << 6;
-  control_packet.type |= response_type << 4;
-
-  nullnet_buf = (uint8_t *)&control_packet;
-  nullnet_len = sizeof(control_packet);
-
-  NETSTACK_NETWORK.output(dest);
-}
-
 void input_callback(const void *data, uint16_t len,
   const linkaddr_t *src, const linkaddr_t *dest)
 {
-  if (len == 0) {
-    return;
-  }
+  uint8_t* packet_type = malloc(sizeof(uint8_t));
+  process_gateway_packet(data, len, src, dest, packet_type);
 
-  uint8_t type = ((uint8_t *)data)[0];
-  uint8_t packet_type = type >> 7;
-
-  if (packet_type == DATA) {
+  if (*packet_type == DATA) {
     LOG_INFO("Received data packet\n");
-  } else if (packet_type == CONTROL) {
-    LOG_INFO("Received control packet\n");
-    // Sending back a control packet to the source
-    // With a control structure 
-    LOG_INFO("Sending back a control packet\n");
-    control_packet_send(src, RESPONSE);
-  }
-
-  // if(len == sizeof(unsigned)) {
-  //   unsigned count;
-  //   memcpy(&count, data, sizeof(count));
-  //   LOG_INFO("Received %u from ", count);
-  //   LOG_INFO_LLADDR(src);
-  //   LOG_INFO_("\n");
-  // }
-}
-
-void init_gateway() {
-  control_packet_send(NULL, SETUP);
+  } 
 }
 
 /*---------------------------------------------------------------------------*/

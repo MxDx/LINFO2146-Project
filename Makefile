@@ -1,6 +1,8 @@
 CONTIKI_PROJECT = gateway node
 all: $(CONTIKI_PROJECT)
 
+MODULES_REL += ./routing
+
 CONTIKI = ..
 
 #use this to enable TSCH: MAKE_MAC = MAKE_MAC_TSCH
