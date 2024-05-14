@@ -12,8 +12,9 @@
 #define DATA 1
 #define CONTROL 0
 
-#define GATEWAY 1
-#define NODE 0
+#define GATEWAY 0b10
+#define SUB_GATEWAY 0b01
+#define NODE 0b00
 
 #define SETUP 0b0
 #define RESPONSE 0b1
@@ -109,6 +110,12 @@ uint8_t not_setup();
  * 
  */
 void init_node();
+
+/**
+ * @brief Initialize the gateway
+ * 
+ */
+void init_sub_gateway();
 
 /**
  * @brief Initialize the gateway
@@ -210,6 +217,17 @@ void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* paren
  * @param packet_type packet type pointer to store the type of the packet
 */
 void process_node_packet(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest, uint8_t* packet_type);
+
+/**
+ * @brief Process a packet and determine its type, if it is a control
+ *       packet, it will process it
+ * @param data packet data
+ * @param len packet length
+ * @param src source address
+ * @param dest destination address
+ * @param packet_type packet type pointer to store the type of the packet
+*/
+void process_sub_gateway_packet(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest, uint8_t* packet_type);
 
 /**
  * @brief Process a packet and determine its type, if it is a control

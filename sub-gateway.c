@@ -29,7 +29,7 @@ void input_callback(const void *data, uint16_t len,
   const linkaddr_t *src, const linkaddr_t *dest)
 {
   uint8_t* packet_type = malloc(sizeof(uint8_t));
-  process_gateway_packet(data, len, src, dest, packet_type);
+  process_sub_gateway_packet(data, len, src, dest, packet_type);
 
   if (*packet_type == DATA) {
     LOG_INFO("Received data packet\n");
@@ -47,14 +47,22 @@ PROCESS_THREAD(gateway_process, ev, data)
 
   parent = malloc(sizeof(parent_t));
   setup = 0;
-  type_parent = GATEWAY;
+  type_parent = SUB_GATEWAY;
 
   PROCESS_BEGIN();
 
   // RESPONSE FUNCTION
   nullnet_set_input_callback(input_callback);
   
-  init_gateway();
+  static struct etimer periodic_timer_setup;
+  etimer_set(&periodic_timer_setup, SEND_INTERVAL);
+  while (not_setup()) {
+    etimer_reset(&periodic_timer_setup);
+    LOG_INFO("Setup value: %u\n", setup);
+    init_sub_gateway();
+    LOG_INFO("Waiting for setup\n");
+    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer_setup));
+  }
 
   etimer_set(&periodic_timer, SEND_INTERVAL);
   while(1) {
