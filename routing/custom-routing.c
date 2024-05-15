@@ -8,7 +8,7 @@ static child_t children[16];
 static uint8_t children_count = 0;
 
 /*---------------------------------------------------------------------------*/
-void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, parent_t* parent) {
+void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, parent_t* parent, uint8_t node_type) {
   linkaddr_copy(&parent->parent_addr, parent_addr);
   type_parent = type;
   parent->type = type;
@@ -24,7 +24,7 @@ void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, p
   LOG_INFO("Sending setup ack control packet\n");
   LOG_INFO("Node type: %u\n", node_type);
   uint8_t data[sizeof(linkaddr_t) + 1];
-  data[0] = type;
+  data[0] = node_type;
   memcpy(data + 1, &linkaddr_node_addr, sizeof(linkaddr_t));
   control_packet_send(node_type, &parent->parent_addr, SETUP_ACK, sizeof(linkaddr_t) + 1, data);
 }
@@ -295,14 +295,14 @@ void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* paren
 
   if (not_setup()) {
     setup = 1;
-    set_parent(src, node_type, rssi, parent);
+    set_parent(src, node_type, rssi, parent, NODE);
     LOG_INFO("First parent setup\n");
     return;
   }
 
   /* If the new parent is better than the current one */
   if (parent->type < node_type) {
-    set_parent(src, node_type, rssi, parent);
+    set_parent(src, node_type, rssi, parent, NODE);
     LOG_INFO("Better parent found\n");
     return;
   }
@@ -313,7 +313,7 @@ void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* paren
       parent->rssi < rssi
       ) 
   {
-    set_parent(src, node_type, rssi, parent);
+    set_parent(src, node_type, rssi, parent, NODE);
     LOG_INFO("Better parent found\n");
     return;
   }
@@ -332,7 +332,7 @@ void check_parent_sub_gateway(const linkaddr_t* src, uint8_t node_type, parent_t
 
   if (not_setup()) {
     setup = 1;
-    set_parent(src, node_type, rssi, parent);
+    set_parent(src, node_type, rssi, parent, SUB_GATEWAY);
     LOG_INFO("First parent setup\n");
     return;
   }
@@ -340,11 +340,10 @@ void check_parent_sub_gateway(const linkaddr_t* src, uint8_t node_type, parent_t
   /* If the new parent is the same as the current one */
   if (parent->rssi < rssi) 
   {
-    set_parent(src, node_type, rssi, parent);
+    set_parent(src, node_type, rssi, parent, SUB_GATEWAY);
     LOG_INFO("Better parent found\n");
     return;
   }
-  LOG_INFO("Parent poopoo\n");
 }
 /*---------------------------------------------------------------------------*/
 

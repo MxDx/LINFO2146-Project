@@ -3,7 +3,7 @@ all: $(CONTIKI_PROJECT)
 
 MODULES_REL += ./routing
 
-CONTIKI = ..
+CONTIKI = /home/user/contiki-ng
 
 #use this to enable TSCH: MAKE_MAC = MAKE_MAC_TSCH
 MAKE_MAC ?= MAKE_MAC_CSMA

@@ -59,8 +59,6 @@ PROCESS_THREAD(node_process, ev, data)
   //   *node_type = NODE;
   // }
 
-  node_type = NODE;
-
   setup = 0;
   type_parent = NODE;
 

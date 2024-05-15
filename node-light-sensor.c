@@ -65,8 +65,6 @@ PROCESS_THREAD(light_sensor_process, ev, data)
   //   node_type = malloc(sizeof(uint8_t));
   //   *node_type = NODE;
   // }
-  node_type = NODE;
-
   setup = 0;
   type_parent = NODE;
 

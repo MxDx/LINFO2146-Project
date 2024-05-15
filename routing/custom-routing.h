@@ -93,7 +93,6 @@ static uint8_t setup = 0;
 // Maybe not needed
 static uint8_t type_parent = 0;
 static linkaddr_t null_addr =         {{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }};
-static uint8_t node_type = 0;
 
 
 /* Routing functions */ 
@@ -108,8 +107,14 @@ static uint8_t node_type = 0;
  * @param type type of the parent node
  * @param parent parent node
  */
-void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, parent_t* parent);
+void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, parent_t* parent, uint8_t node_type);
 
+/**
+ * @brief Set the child address
+ * 
+ * @param src source address
+ * @param data data of the packet
+ */
 void set_child(const linkaddr_t* src, uint8_t* data);
 
 /**

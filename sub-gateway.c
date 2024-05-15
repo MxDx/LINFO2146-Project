@@ -73,8 +73,6 @@ PROCESS_THREAD(gateway_process, ev, data)
   //   node_type = malloc(sizeof(uint8_t));
   //   *node_type = SUB_GATEWAY;
   // }
-  node_type = SUB_GATEWAY;
-
   setup = 0;
   type_parent = SUB_GATEWAY;
 
