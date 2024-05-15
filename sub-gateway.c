@@ -46,10 +46,7 @@ void input_callback(const void *data, uint16_t len,
 
   if (*packet_type == DATA) {
     LOG_INFO("Received data packet\n");
-    data_packet_t* data_packet = malloc(sizeof(data_packet_t));
-    process_data_packet((uint8_t*) data, len, data_packet);
-
-    print_data_packet(data_packet);
+    forward_data_packet(data, len, parent);
   } 
 }
 
@@ -57,8 +54,11 @@ void input_callback(const void *data, uint16_t len,
 PROCESS_THREAD(gateway_process, ev, data)
 {
   static struct etimer periodic_timer;
+  if (parent == NULL) {
+    parent = malloc(sizeof(parent_t));
+    parent->parent_addr = malloc(sizeof(linkaddr_t));
+  }
 
-  parent = malloc(sizeof(parent_t));
   setup = 0;
   type_parent = SUB_GATEWAY;
 

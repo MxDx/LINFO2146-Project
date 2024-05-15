@@ -47,6 +47,7 @@ PROCESS_THREAD(light_sensor_process, ev, data)
     parent = malloc(sizeof(parent_t));
     parent->parent_addr = malloc(sizeof(linkaddr_t));
   }
+
   setup = 0;
   type_parent = NODE;
 

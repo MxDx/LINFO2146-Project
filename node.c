@@ -34,8 +34,11 @@ void input_callback(const void *data, uint16_t len,
 PROCESS_THREAD(node_process, ev, data)
 {
   static struct etimer periodic_timer;
+  if (parent == NULL) {
+    parent = malloc(sizeof(parent_t));
+    parent->parent_addr = malloc(sizeof(linkaddr_t));
+  }
 
-  parent = malloc(sizeof(parent_t));
   setup = 0;
   type_parent = NODE;
 

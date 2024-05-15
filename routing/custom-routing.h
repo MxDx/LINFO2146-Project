@@ -89,6 +89,7 @@ static uint8_t type_parent = 0;
  * @param parent_addr parent address
  * @param rssi signal strength
  * @param type type of the parent node
+ * @param parent parent node
  */
 void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, parent_t* parent);
 
@@ -144,6 +145,7 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
  * @param len_data length of the data
  * @param topic topic of the data
  * @param data data of the packet
+ * @param parent parent node
  */
 void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* data, parent_t* parent);
 
@@ -152,6 +154,7 @@ void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* 
  * 
  * @param data data of the packet
  * @param len length of the data
+ * @param parent parent node
  */
 void forward_data_packet(const void *data, uint16_t len, parent_t* parent);
 
@@ -187,6 +190,7 @@ void process_control_header(const void *data, uint16_t len, control_header_t* co
  * @param node_type type of the node
  * @param dest destination address
  * @param response_type type of the response
+ * @param len_of_data length of the data
  */
 void control_packet_send(uint8_t node_type, const linkaddr_t* dest, uint8_t response_type, uint16_t len_of_data); 
 
@@ -198,6 +202,7 @@ void control_packet_send(uint8_t node_type, const linkaddr_t* dest, uint8_t resp
  * @param node_type type of the node
  * @param parent_addr current parent node
  * @param setup setup flag
+ * @param parent parent node
  */
 void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* parent);
 
@@ -209,6 +214,7 @@ void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* paren
  * @param src source address
  * @param dest destination address
  * @param packet_type packet type pointer to store the type of the packet
+ * @param parent parent node
 */
 void process_node_packet(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest, uint8_t* packet_type, parent_t* parent);
 
@@ -220,6 +226,7 @@ void process_node_packet(const void *data, uint16_t len, const linkaddr_t *src, 
  * @param src source address
  * @param dest destination address
  * @param packet_type packet type pointer to store the type of the packet
+ * @param parent parent node
 */
 void process_sub_gateway_packet(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest, uint8_t* packet_type, parent_t* parent);
 
