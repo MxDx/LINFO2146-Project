@@ -20,7 +20,7 @@
 PROCESS(light_sensor_process, "Light sensor process");
 AUTOSTART_PROCESSES(&light_sensor_process);
 
-static parent_t* parent;
+static parent_t parent;
 
 // Function to generate random light intensity
 int generate_light_intensity() {
@@ -31,10 +31,28 @@ int generate_light_intensity() {
 void input_callback(const void *data, uint16_t len,
   const linkaddr_t *src, const linkaddr_t *dest)
 {
-  uint8_t* packet_type = malloc(sizeof(uint8_t));
-  process_node_packet(data, len, src, dest, packet_type, parent); 
-  LOG_INFO("Parent pointer after process node packet: %p\n", parent->parent_addr);
+  packet_t packet;
+  process_packet(data, len, &packet);
 
+  LOG_INFO("Received packet\n");
+  LOG_INFO("From: ");
+  LOG_INFO_LLADDR(&packet.src);
+  LOG_INFO_("\n");
+  LOG_INFO("To: ");
+  LOG_INFO_LLADDR(&packet.dest);
+  LOG_INFO_("\n");
+  
+  if (
+    !linkaddr_cmp(&packet.dest, &linkaddr_node_addr) &&
+    !linkaddr_cmp(&packet.dest, &null_addr)
+  ) {
+    LOG_INFO("Ignoring packet not for me\n");
+    return;
+  }
+
+
+  uint8_t packet_type;
+  process_node_packet(data + 2*sizeof(linkaddr_t), len, &packet.src, &packet.dest, &packet_type, &parent);
   LOG_INFO("Received packet\n");
 }
 
@@ -43,15 +61,13 @@ PROCESS_THREAD(light_sensor_process, ev, data)
 {
   static struct etimer periodic_timer;
   // If the parent is already allocated we don't need to allocate it again
-  if (parent == NULL) {
-    parent = malloc(sizeof(parent_t));
-    parent->parent_addr = malloc(sizeof(linkaddr_t));
+  if (node_type == NULL) {
+    node_type = malloc(sizeof(uint8_t));
+    *node_type = SUB_GATEWAY;
   }
 
   setup = 0;
   type_parent = NODE;
-
-  LOG_INFO("Parent pointer at start: %p\n", parent->parent_addr);
 
   PROCESS_BEGIN();
 
@@ -66,12 +82,6 @@ PROCESS_THREAD(light_sensor_process, ev, data)
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer_setup));
   }
 
-  LOG_INFO("Setup done\n");
-  LOG_INFO("Parent address: ");
-  LOG_INFO_LLADDR(parent->parent_addr);
-  LOG_INFO_("\n");
-  LOG_INFO("Parent pointer: %p\n", parent->parent_addr);
-
   etimer_set(&periodic_timer, SEND_INTERVAL);
   while(1) {
     etimer_reset(&periodic_timer);
@@ -85,7 +95,7 @@ PROCESS_THREAD(light_sensor_process, ev, data)
     sprintf(light_intensity_str, "%d", light_intensity);
     uint16_t len_data = strlen(light_intensity_str);
 
-    send_data_packet(len_topic, len_data, topic, light_intensity_str, parent);    
+    send_data_packet(len_topic, len_data, topic, light_intensity_str, &parent);    
     LOG_INFO("Packet sent\n");
 
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));

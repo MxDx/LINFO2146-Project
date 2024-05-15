@@ -21,7 +21,7 @@
 PROCESS(gateway_process, "Gateway process");
 AUTOSTART_PROCESSES(&gateway_process);
 
-parent_t* parent;
+parent_t parent;
 
 // static linkaddr_t parent_addr =         {{ 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }};
 
@@ -29,34 +29,53 @@ parent_t* parent;
 
 void input_callback(const void *data, uint16_t len,
   const linkaddr_t *src, const linkaddr_t *dest)
-{
+{  
+  
+  packet_t packet;
+  process_packet(data, len, &packet);
 
   LOG_INFO("Received packet\n");
+  LOG_INFO("From: ");
+  LOG_INFO_LLADDR(&packet.src);
+  LOG_INFO_("\n");
+  LOG_INFO("To: ");
+  LOG_INFO_LLADDR(&packet.dest);
+  LOG_INFO_("\n");
+  
+  if (
+    !linkaddr_cmp(&packet.dest, &linkaddr_node_addr) &&
+    !linkaddr_cmp(&packet.dest, &null_addr)
+  ) {
+    LOG_INFO("My linkaddr: ");
+    LOG_INFO_LLADDR(&linkaddr_node_addr);
+    LOG_INFO_("\n");
+    LOG_INFO("Ignoring packet not for me\n");
+    return;
+  }
 
-  uint8_t* packet_type = malloc(sizeof(uint8_t));
 
-  linkaddr_t* src_addr = malloc(sizeof(linkaddr_t));
-  linkaddr_t* dest_addr = malloc(sizeof(linkaddr_t));
-  void* data_cpy = malloc(len);
-  memcpy(src_addr, src, sizeof(linkaddr_t));
-  memcpy(dest_addr, dest, sizeof(linkaddr_t));
-  memcpy(data_cpy, data, len);
+  uint8_t packet_type;
+  process_sub_gateway_packet(data + 2*sizeof(linkaddr_t), len, &packet.src, &packet.dest, &packet_type, &parent);
 
-  process_sub_gateway_packet(data_cpy, len, src_addr, dest_addr, packet_type, parent);
-
-  if (*packet_type == DATA) {
+  if (packet_type == DATA) {
     LOG_INFO("Received data packet\n");
-    forward_data_packet(data, len, parent);
+    forward_data_packet(data, len, &parent);
   } 
+
 }
 
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(gateway_process, ev, data)
 {
   static struct etimer periodic_timer;
-  if (parent == NULL) {
-    parent = malloc(sizeof(parent_t));
-    parent->parent_addr = malloc(sizeof(linkaddr_t));
+  static struct etimer periodic_timer_setup;
+  // if (parent == NULL) {
+  //   parent = malloc(sizeof(parent_t));
+  //   parent->parent_addr = malloc(sizeof(linkaddr_t));
+  // }
+  if (node_type == NULL) {
+    node_type = malloc(sizeof(uint8_t));
+    *node_type = SUB_GATEWAY;
   }
 
   setup = 0;
@@ -67,7 +86,6 @@ PROCESS_THREAD(gateway_process, ev, data)
   // RESPONSE FUNCTION
   nullnet_set_input_callback(input_callback);
   
-  static struct etimer periodic_timer_setup;
   etimer_set(&periodic_timer_setup, SEND_INTERVAL);
   while (not_setup()) {
     etimer_reset(&periodic_timer_setup);
@@ -83,7 +101,7 @@ PROCESS_THREAD(gateway_process, ev, data)
     LOG_INFO("Running....\n");
     etimer_reset(&periodic_timer);
   }
-  LOG_INFO("Gateway process ended\n");
+  LOG_INFO("Sub-gateway process ended\n");
 
   PROCESS_END();
 }

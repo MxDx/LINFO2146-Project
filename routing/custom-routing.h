@@ -16,8 +16,9 @@
 #define SUB_GATEWAY 0b01
 #define NODE 0b00
 
-#define SETUP 0b0
-#define RESPONSE 0b1
+#define SETUP 0b00
+#define RESPONSE 0b01
+#define SETUP_ACK 0b10
 
 
 /* Structure for parent nodes
@@ -70,14 +71,24 @@ typedef struct {
     - data: data of the packet
 */
 typedef struct {
-    data_header_t* header;
+    data_header_t header;
     char* topic;
     char* data;
 } data_packet_t;
 
+typedef struct {
+    linkaddr_t src;
+    linkaddr_t dest;
+    void* packet;
+} packet_t;
+
+
 // static parent_t* parent;
 static uint8_t setup = 0;
+// Maybe not needed
 static uint8_t type_parent = 0;
+static uint8_t* node_type;
+static linkaddr_t null_addr =         {{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }};
 
 /* Routing functions */ 
 /*---------------------------------------------------------------------------*/
@@ -117,6 +128,26 @@ void init_sub_gateway();
  * 
  */
 void init_gateway();
+
+/**
+ * @brief Send a packet to a destination
+ * 
+ * @param output output packet
+ * @param src source address
+ * @param dest destination address
+ * @param packet packet to send
+ * @param len_packet length of the packet
+ */
+void packing_packet(uint8_t* output, linkaddr_t* src, linkaddr_t* dest, uint8_t* packet, uint16_t len_packet);
+
+/**
+ * @brief Process a packet and determine its type
+ * 
+ * @param input_data packet data
+ * @param len packet length
+ * @param packet packet pointer to store the type of the packet
+ */
+void process_packet(const uint8_t* input_data, uint16_t len, packet_t* packet);
 
 /**
  * @brief Build the data header of a packet
@@ -164,8 +195,9 @@ void forward_data_packet(const void *data, uint16_t len, parent_t* parent);
  * @param control_header control header pointer to store the header
  * @param node_type type of the node
  * @param response_type type of the response
+ * @param dest destination address
  */
-void build_control_header(control_header_t* control_header, uint8_t node_type, uint8_t response_type);
+void build_control_header(control_header_t* control_header, uint8_t node_type, uint8_t response_type, linkaddr_t* dest);
 
 /**
  * @brief Pack the control packet
@@ -182,7 +214,7 @@ void packing_control_packet(control_packet_t* control_packet, uint8_t* data);
  * @param len packet length
  * @param control_header control header pointer to store the header
  */
-void process_control_header(const void *data, uint16_t len, control_header_t* control_header);
+void process_control_header(const uint8_t *data, uint16_t len, control_header_t* control_header);
 
 /**
  * @brief Send a control packet to a destination
@@ -192,7 +224,7 @@ void process_control_header(const void *data, uint16_t len, control_header_t* co
  * @param response_type type of the response
  * @param len_of_data length of the data
  */
-void control_packet_send(uint8_t node_type, const linkaddr_t* dest, uint8_t response_type, uint16_t len_of_data); 
+void control_packet_send(uint8_t node_type, linkaddr_t* dest, uint8_t response_type, uint16_t len_of_data); 
 
 /**
  * @brief Check if the parent node is better than the current one and update it,
@@ -216,7 +248,7 @@ void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* paren
  * @param packet_type packet type pointer to store the type of the packet
  * @param parent parent node
 */
-void process_node_packet(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest, uint8_t* packet_type, parent_t* parent);
+void process_node_packet(const void *data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type, parent_t* parent);
 
 /**
  * @brief Process a packet and determine its type, if it is a control
@@ -228,7 +260,7 @@ void process_node_packet(const void *data, uint16_t len, const linkaddr_t *src, 
  * @param packet_type packet type pointer to store the type of the packet
  * @param parent parent node
 */
-void process_sub_gateway_packet(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest, uint8_t* packet_type, parent_t* parent);
+void process_sub_gateway_packet(const uint8_t* data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type, parent_t* parent);
 
 /**
  * @brief Process a packet and determine its type, if it is a control
@@ -239,7 +271,7 @@ void process_sub_gateway_packet(const void *data, uint16_t len, const linkaddr_t
  * @param dest destination address
  * @param packet_type packet type pointer to store the type of the packet
 */
-void process_gateway_packet(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest, uint8_t* packet_type);
+void process_gateway_packet(const void *data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type);
 
 /*---------------------------------------------------------------------------*/
 /* Debug functions */

@@ -1,4 +1,4 @@
-#include "contiki.h"
+
 #include "net/netstack.h"
 #include "net/nullnet/nullnet.h"
 #include <string.h>
@@ -30,10 +30,30 @@ parent_t* parent;
 void input_callback(const void *data, uint16_t len,
   const linkaddr_t *src, const linkaddr_t *dest)
 {
-  uint8_t* packet_type = malloc(sizeof(uint8_t));
-  process_gateway_packet(data, len, src, dest, packet_type);
+  packet_t packet;
+  process_packet(data, len, &packet);
 
-  if (*packet_type == DATA) {
+  LOG_INFO("Received packet\n");
+  LOG_INFO("From: ");
+  LOG_INFO_LLADDR(&packet.src);
+  LOG_INFO_("\n");
+  LOG_INFO("To: ");
+  LOG_INFO_LLADDR(&packet.dest);
+  LOG_INFO_("\n");
+  
+  if (
+    !linkaddr_cmp(&packet.dest, &linkaddr_node_addr) &&
+    !linkaddr_cmp(&packet.dest, &null_addr)
+  ) {
+    LOG_INFO("Ignoring packet not for me\n");
+    return;
+  }
+
+
+  uint8_t packet_type;
+  process_gateway_packet(data + 2*sizeof(linkaddr_t), len, &packet.src, &packet.dest, &packet_type);
+
+  if (packet_type == DATA) {
     LOG_INFO("Received data packet\n");
     data_packet_t* data_packet = malloc(sizeof(data_packet_t));
     process_data_packet((uint8_t*) data, len, data_packet);
@@ -50,6 +70,10 @@ PROCESS_THREAD(gateway_process, ev, data)
     parent = malloc(sizeof(parent_t));
     parent->parent_addr = malloc(sizeof(linkaddr_t));
   }
+  if (node_type == NULL) {
+    node_type = malloc(sizeof(uint8_t));
+    *node_type = SUB_GATEWAY;
+  }
 
   setup = 0;
   type_parent = GATEWAY;
@@ -64,6 +88,7 @@ PROCESS_THREAD(gateway_process, ev, data)
   etimer_set(&periodic_timer, SEND_INTERVAL);
   while(1) {
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
+    LOG_INFO("Running....\n");
     etimer_reset(&periodic_timer);
   }
   LOG_INFO("Gateway process ended\n");

@@ -5,6 +5,9 @@
 
 /* Configuration */
 
+// uint64_t packet_space;
+// uint64_t playing_space;
+
 /*---------------------------------------------------------------------------*/
 void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, parent_t* parent) {
   linkaddr_copy(parent->parent_addr, parent_addr);
@@ -17,11 +20,14 @@ void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, p
   LOG_INFO_("\n");
   LOG_INFO("Parent type: %u\n", type);
   LOG_INFO("Parent rssi: %d\n", rssi);
-  LOG_INFO("Parent pointer: %p\n", parent->parent_addr);
+
+  // Sending setup ack to the parent
+  LOG_INFO("Sending setup ack control packet\n");
+  LOG_INFO("Node type: %u\n", *node_type);
+  control_packet_send(*node_type, parent->parent_addr, SETUP_ACK, 0);
 }
 
 uint8_t not_setup() {
-  LOG_INFO("Setup: %u\n", setup);
   return setup == 0;
 }
 
@@ -50,13 +56,36 @@ void init_gateway() {
 }
 /*---------------------------------------------------------------------------*/
 
+/*---------------------------------------------------------------------------*/
+void packing_packet(uint8_t* output, linkaddr_t* src, linkaddr_t* dest, uint8_t* packet, uint16_t len_packet) {
+  /* Adding the src and dest at the beginning of the packet */
+  memcpy(output, src, sizeof(linkaddr_t));
+  memcpy(output + sizeof(linkaddr_t), dest, sizeof(linkaddr_t));
+
+  /* Adding the packet */
+  memcpy(output + 2*sizeof(linkaddr_t), packet, len_packet);
+}
+
+void process_packet(const uint8_t* input_data, uint16_t len, packet_t* packet) {
+  if (len == 0) {
+    return;
+  }
+
+  /* Extracting the source and destination addresses */
+  memcpy(&packet->src, input_data, sizeof(linkaddr_t));
+  memcpy(&packet->dest, input_data + sizeof(linkaddr_t), sizeof(linkaddr_t));
+}
+/*---------------------------------------------------------------------------*/
+
 
 /*---------------------------------------------------------------------------*/
 void build_data_header(data_packet_t* data_packet, uint16_t len_topic, uint16_t len_data, char* topic, char* data) {
-  data_header_t* header = malloc(sizeof(data_header_t));
-  header->type = DATA;
-  header->len_topic = len_topic & 0x7FFF;
-  header->len_data = len_data;
+  data_header_t header;
+  header.type = DATA;
+  LOG_INFO("Len topic: %u\n", len_topic);
+  header.len_topic = len_topic & 0x7FFF;
+  LOG_INFO("Len topic after: %u\n", header.len_topic);
+  header.len_data = len_data;
 
   data_packet->header = header;
   data_packet->topic = topic;
@@ -65,17 +94,17 @@ void build_data_header(data_packet_t* data_packet, uint16_t len_topic, uint16_t 
 
 void packing_data_packet(data_packet_t* data_packet, uint8_t* data) {
   data[0] = 0;
-  data[0] = data_packet->header->type << 7;
+  data[0] = data_packet->header.type << 7;
 
   /* Setting the first 2 bytes to be the length of topic wihtout erasing the first bit */
-  data[0] |= (data_packet->header->len_topic & 0x7F) >> 8;
-  data[1] = data_packet->header->len_topic;
-  data[2] = data_packet->header->len_data >> 8;
-  data[3] = data_packet->header->len_data;
+  data[0] |= (data_packet->header.len_topic & 0x7F) >> 8;
+  data[1] = data_packet->header.len_topic;
+  data[2] = data_packet->header.len_data >> 8;
+  data[3] = data_packet->header.len_data;
 
   /* Setting the rest of the data to be the data_packet->topic and data_packet->data pointers */
-  memcpy(data + 4, data_packet->topic, data_packet->header->len_topic);
-  memcpy(data + 4 + data_packet->header->len_topic, data_packet->data, data_packet->header->len_data);
+  memcpy(data + 4, data_packet->topic, data_packet->header.len_topic);
+  memcpy(data + 4 + data_packet->header.len_topic, data_packet->data, data_packet->header.len_data);
 }
 
 void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t* data_packet) {
@@ -83,25 +112,27 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
     return;
   }
 
-  data_header_t* header = malloc(sizeof(data_header_t));
+  uint16_t start_of_data = sizeof(linkaddr_t)*2;
+
+  data_header_t header;
 
   /* Extracting the first byte of the data */
-  header->type = input_data[0] >> 7;
+  header.type = input_data[start_of_data] >> 7;
 
   /* Extracting the first 2 bytes of the data */
-  header->len_topic = (input_data[0] & 0x7F) << 8;
-  header->len_topic |= input_data[1];
-  header->len_data = input_data[2] << 8;
-  header->len_data |= input_data[3];
+  header.len_topic = (input_data[start_of_data] & 0x7F) << 8;
+  header.len_topic |= input_data[start_of_data + 1];
+  header.len_data = input_data[start_of_data + 2] << 8;
+  header.len_data |= input_data[start_of_data + 3];
 
   /* Extracting the topic and data */
-  char* data_topic = malloc(sizeof(char)*header->len_topic + 1);
-  char* data = malloc(sizeof(char)*header->len_data + 1);
-  memcpy(data_topic, input_data + 4, header->len_topic);
-  memcpy(data, input_data + 4 + header->len_topic, header->len_data);
+  char* data_topic = malloc(sizeof(char)*header.len_topic + 1);
+  char* data = malloc(sizeof(char)*header.len_data + 1);
+  memcpy(data_topic, input_data + start_of_data + 4, header.len_topic);
+  memcpy(data, input_data + start_of_data + 4 + header.len_topic, header.len_data);
 
-  data_topic[header->len_topic] = '\0';
-  data[header->len_data] = '\0';
+  data_topic[header.len_topic] = '\0';
+  data[header.len_data] = '\0';
 
   data_packet->header = header;
   data_packet->topic = data_topic;
@@ -114,27 +145,38 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
 
 /*---------------------------------------------------------------------------*/
 void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* input_data, parent_t* parent) {
-  data_packet_t* data_packet = malloc(sizeof(data_packet_t));
-  build_data_header(data_packet, len_topic, len_data, topic, input_data);
-
+  data_packet_t data_packet;
+  build_data_header(&data_packet, len_topic, len_data, topic, input_data);
+  
+  LOG_INFO("Len topic: %u\n", data_packet.header.len_topic);
   LOG_INFO("Sending data packet\n");
-  print_data_packet(data_packet);
+  print_data_packet(&data_packet);
 
   uint8_t* data = malloc(sizeof(uint8_t)*(len_topic + len_data + 4));
-  packing_data_packet(data_packet, data);
+  LOG_INFO("Before packing data packet\n");
+  packing_data_packet(&data_packet, data);
 
-  nullnet_buf = (uint8_t *)data;
-  nullnet_len = 4 + len_topic + len_data;
+  uint8_t* output = malloc(sizeof(uint8_t)*(len_topic + len_data + 4) + 2*sizeof(linkaddr_t));
+  LOG_INFO("Before packing\n");
+  packing_packet(output, &linkaddr_node_addr, parent->parent_addr, data, len_topic + len_data + 4 + 2*sizeof(linkaddr_t));
+
+  nullnet_buf = (uint8_t *)output;
+  nullnet_len = 2*sizeof(linkaddr_t) + 4 + len_topic + len_data;
 
   const linkaddr_t* dest = parent->parent_addr;
   LOG_INFO("Sending data packet to: ");
   LOG_INFO_LLADDR(dest);
   LOG_INFO_("\n");
   NETSTACK_NETWORK.output(dest);
+
+  free(data_packet.topic);
+  free(data_packet.data);
+
+  free(data);
+  free(output);
 }
 
 void forward_data_packet(const void *data, uint16_t len, parent_t* parent) {
-  LOG_INFO("Forwarding data packet\n");
   nullnet_buf = (uint8_t *)data;
   nullnet_len = len;
 
@@ -148,7 +190,7 @@ void forward_data_packet(const void *data, uint16_t len, parent_t* parent) {
 
 
 /*---------------------------------------------------------------------------*/
-void build_control_header(control_header_t* control_header, uint8_t node_type, uint8_t response_type) {
+void build_control_header(control_header_t* control_header, uint8_t node_type, uint8_t response_type, linkaddr_t* dest) {
   control_header->type = CONTROL;
   control_header->node_type = node_type;
   control_header->response_type = response_type;
@@ -157,45 +199,63 @@ void build_control_header(control_header_t* control_header, uint8_t node_type, u
 void packing_control_packet(control_packet_t* control_packet, uint8_t* data) {
   data[0] = control_packet->header->type << 7;
   data[0] |= control_packet->header->node_type << 5;
-  data[0] |= control_packet->header->response_type << 4;
+  data[0] |= control_packet->header->response_type << 3;
 
-  /* Setting the rest of the data to be the control_packet->data pointer */
-  data[1] = control_packet->data;
+  /* Adding the data */
+  // memcpy(data + 5, control_packet->data, control_packet->len_data);
+
 }
 
-void process_control_header(const void *data, uint16_t len, control_header_t* control_header) {
+void process_control_header(const uint8_t *data, uint16_t len, control_header_t* control_header) {
   if (len == 0) {
+    LOG_INFO("Empty packet\n");
     return;
   }
 
   uint8_t header = ((uint8_t *)data)[0];
   control_header->type = header >> 7;
   control_header->node_type = (header >> 5) & 0b11;
-  control_header->response_type = (header >> 4) & 0b1;
+  control_header->response_type = (header >> 3) & 0b11;
 }
 /*---------------------------------------------------------------------------*/
 
 
 /*---------------------------------------------------------------------------*/
-void control_packet_send(uint8_t node_type, const linkaddr_t* dest, uint8_t response_type, uint16_t len_of_data) {
-  control_packet_t* control_packet = malloc(sizeof(control_packet_t));
-  control_header_t* header = malloc(sizeof(control_header_t));
-  build_control_header(header, node_type, response_type);
-  control_packet->header = header;
+void control_packet_send(uint8_t node_type, linkaddr_t* dest, uint8_t response_type, uint16_t len_of_data) {
+  control_packet_t control_packet;
+  control_header_t header;
+  build_control_header(&header, node_type, response_type, dest);
+  control_packet.header = &header;
   LOG_INFO("Sending control packet\n");
-  LOG_INFO("Node type: %u\n", header->node_type);
-  LOG_INFO("Response type: %u\n", header->response_type);
+  LOG_INFO("Node type: %u\n", header.node_type);
+  LOG_INFO("Response type: %u\n", header.response_type);
 
   uint8_t* data = malloc(sizeof(uint8_t)*(len_of_data + 1));  
-  packing_control_packet(control_packet, data);
-  nullnet_buf = (uint8_t *)data;
-  nullnet_len = sizeof(data);
+  packing_control_packet(&control_packet, data);
 
-  LOG_INFO("Sending control packet to: ");
+  uint8_t* output = malloc(sizeof(uint8_t)*(len_of_data + 1) + 2*sizeof(linkaddr_t));
+  if (dest == NULL) {
+    packing_packet(output, &linkaddr_node_addr, &null_addr, data, len_of_data + 1 + 2*sizeof(linkaddr_t));
+    LOG_INFO("Sending control packet to null\n");
+    LOG_INFO("Address: ");
+    LOG_INFO_LLADDR(&null_addr);
+    LOG_INFO_("\n");
+  } else {
+    packing_packet(output, &linkaddr_node_addr, dest, data, len_of_data + 1 + 2*sizeof(linkaddr_t));
+  }
+
+  nullnet_buf = (uint8_t *)output;
+  nullnet_len = sizeof(linkaddr_t)*2 + len_of_data + 1;
+
+  LOG_INFO("Sending control packet to coucou: ");
   LOG_INFO_LLADDR(dest);
   LOG_INFO_("\n");
 
   NETSTACK_NETWORK.output(dest);
+
+  /* Freeing everything */
+  free(data);
+  free(output);
 }
 
 void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* parent) {
@@ -216,7 +276,7 @@ void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* paren
   }
 
   /* If the new parent is better than the current one */
-  if (parent->parent_addr < src) {
+  if (parent->type < node_type) {
     set_parent(src, node_type, rssi, parent);
     LOG_INFO("Better parent found\n");
     return;
@@ -234,11 +294,38 @@ void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* paren
   }
   LOG_INFO("Parent poopoo\n");
 }
+
+void check_parent_sub_gateway(const linkaddr_t* src, uint8_t node_type, parent_t* parent) {
+  /* Create new possible parent */
+  signed char rssi = cc2420_last_rssi;
+  LOG_INFO("type_parent: %u\n", type_parent);
+
+  if (node_type != GATEWAY) {
+    LOG_INFO("Ignoring not a gateway\n");
+    return;
+  }
+
+  if (not_setup()) {
+    setup = 1;
+    set_parent(src, node_type, rssi, parent);
+    LOG_INFO("First parent setup\n");
+    return;
+  }
+
+  /* If the new parent is the same as the current one */
+  if (parent->rssi < rssi) 
+  {
+    set_parent(src, node_type, rssi, parent);
+    LOG_INFO("Better parent found\n");
+    return;
+  }
+  LOG_INFO("Parent poopoo\n");
+}
 /*---------------------------------------------------------------------------*/
 
 
 /*---------------------------------------------------------------------------*/
-void process_node_packet(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest, uint8_t* packet_type, parent_t* parent) {
+void process_node_packet(const void *data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type, parent_t* parent) {
   if (len == 0) {
     LOG_INFO("Empty packet\n");
     return;
@@ -250,33 +337,45 @@ void process_node_packet(const void *data, uint16_t len, const linkaddr_t *src, 
 
   if (*packet_type == CONTROL) {
     LOG_INFO("Received control packet\n");
-    control_header_t* header = malloc(sizeof(control_header_t));
-    process_control_header(data, len, header);
-    LOG_INFO("Node type: %u\n", header->node_type);
-    LOG_INFO("Response type: %u\n", header->response_type);
+    control_header_t header;
+    process_control_header(data, len, &header);
+    LOG_INFO("Node type: %u\n", header.node_type);
+    LOG_INFO("Response type: %u\n", header.response_type);
 
-    if (header->node_type == SUB_GATEWAY && header->response_type == RESPONSE) {
-      check_parent_node(src, header->node_type, parent);
 
-      LOG_INFO("Parent pointer after check parent node: %p\n", parent->parent_addr);
+    if (header.node_type == SUB_GATEWAY && header.response_type == RESPONSE) {
+      check_parent_node(src, header.node_type, parent);
       return;
     }
 
     /* Sending back a control packet to the source
      * if setup is not done
     */
-    if (!not_setup() && header->response_type == SETUP) {
+    if (!not_setup() && header.response_type == SETUP) {
       LOG_INFO("Sending response control packet\n");
       control_packet_send(NODE, src, RESPONSE, 0);
       return;
     }
 
-    if (header->response_type == SETUP) {
+    if (header.response_type == SETUP) {
       LOG_INFO("Ignoring packet, node not setup\n");
       return;
     }
 
-    check_parent_node(src, header->node_type, parent);
+    if (header.response_type == RESPONSE) {
+      LOG_INFO("Received response control packet\n");
+      check_parent_node(src, header.node_type, parent);
+      return;
+    }
+
+    if (header.response_type == SETUP_ACK) {
+      LOG_INFO("Received setup ack control packet\n");
+      LOG_INFO("New children at address: ");
+      LOG_INFO_LLADDR(src);
+      LOG_INFO_("\n");
+      return;
+    }
+
     return;
   }
 
@@ -291,7 +390,7 @@ void process_node_packet(const void *data, uint16_t len, const linkaddr_t *src, 
   }
 }
 
-void process_sub_gateway_packet(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest, uint8_t* packet_type, parent_t* parent) {
+void process_sub_gateway_packet(const uint8_t* data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type, parent_t* parent) {
   LOG_INFO("Processing sub gateway packet\n");
   if (len == 0) {
     LOG_INFO("Empty packet\n");
@@ -305,30 +404,34 @@ void process_sub_gateway_packet(const void *data, uint16_t len, const linkaddr_t
 
   if (*packet_type == CONTROL) {
     LOG_INFO("Received control packet\n");
-    control_header_t* header = malloc(sizeof(control_header_t));
-    process_control_header(data, len, header);
-    LOG_INFO("Node type: %u\n", header->node_type);
-    LOG_INFO("Response type: %u\n", header->response_type);
-    signed char rssi = cc2420_last_rssi;
+    control_header_t header;
+    LOG_INFO("Processing control header\n");
+    process_control_header(data, len, &header);
+    LOG_INFO("Node type: %u\n", header.node_type);
+    LOG_INFO("Response type: %u\n", header.response_type);
 
-    if (not_setup() && header->response_type == RESPONSE && header->node_type == GATEWAY) {
-      set_parent(src, GATEWAY, rssi, parent);
-      LOG_INFO("Setup sub-gateway\n");
-      setup = 1;
+    if (header.response_type == SETUP_ACK) {
+      LOG_INFO("Received setup ack control packet\n");
+      LOG_INFO("New children at address: ");
+      LOG_INFO_LLADDR(src);
+      LOG_INFO_("\n");
       return;
     }
 
-    if (not_setup()) {
-      LOG_INFO("Ignoring control packet, gateway not setup\n");
+    if (header.response_type <= 1 && header.node_type == GATEWAY) {
+      check_parent_sub_gateway(src, header.node_type, parent);
       return;
     }
 
-    LOG_INFO("Sending back a control packet\n");
-    control_packet_send(SUB_GATEWAY, src, RESPONSE, 0);
+    if (!not_setup() && header.response_type == SETUP) {
+      LOG_INFO("Sending back a control packet\n");
+      control_packet_send(SUB_GATEWAY, src, RESPONSE, 0);
+      return;
+    }
   }
 }
 
-void process_gateway_packet(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest, uint8_t* packet_type) {
+void process_gateway_packet(const void *data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type) {
   LOG_INFO("Processing gateway packet\n");
   if (len == 0) {
     LOG_INFO("Empty packet\n");
@@ -341,28 +444,43 @@ void process_gateway_packet(const void *data, uint16_t len, const linkaddr_t *sr
 
   if (*packet_type == CONTROL) {
 
-    control_header_t* header = malloc(sizeof(control_header_t));
-    process_control_header(data, len, header);
-    LOG_INFO("Node type: %u\n", header->node_type);
-    LOG_INFO("Response type: %u\n", header->response_type);
+    control_header_t header; 
+    process_control_header(data, len, &header);
+    LOG_INFO("Node type: %u\n", header.node_type);
+    LOG_INFO("Response type: %u\n", header.response_type);
 
-    if (header->node_type != SUB_GATEWAY) {
+    if (header.node_type != SUB_GATEWAY) {
       LOG_INFO("Ignoring control packet, not from sub-gateway\n");
       return;
     }
 
-    LOG_INFO("Received control packet\n");
-    LOG_INFO("Sending back a control packet\n");
-    control_packet_send(GATEWAY, src, RESPONSE, 0);
+    if (header.response_type == SETUP_ACK) {
+      LOG_INFO("Received setup ack control packet\n");
+      LOG_INFO("New children at address: ");
+      LOG_INFO_LLADDR(src);
+      LOG_INFO_("\n");
+      return;
+    }
+
+    if (header.response_type == SETUP) {
+      LOG_INFO("Sending back a control packet\n");
+      control_packet_send(GATEWAY, src, RESPONSE, 0);
+      return;
+    }
   }
 }
 /*---------------------------------------------------------------------------*/
 
+
+
+
+
+/*---------------------------------------------------------------------------*/
 void print_data_packet(data_packet_t* data_packet) {
   LOG_INFO("Data packet\n");
-  LOG_INFO("Type: %u\n", data_packet->header->type);
-  LOG_INFO("Length of topic: %u\n", data_packet->header->len_topic);
-  LOG_INFO("Length of data: %u\n", data_packet->header->len_data);
+  LOG_INFO("Type: %u\n", data_packet->header.type);
+  LOG_INFO("Length of topic: %u\n", data_packet->header.len_topic);
+  LOG_INFO("Length of data: %u\n", data_packet->header.len_data);
   LOG_INFO("Topic: %s\n", data_packet->topic);
   LOG_INFO("Data: %s\n", data_packet->data);
 }
