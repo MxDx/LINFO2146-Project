@@ -69,14 +69,11 @@ PROCESS_THREAD(gateway_process, ev, data)
 {
   static struct etimer periodic_timer;
   static struct etimer periodic_timer_setup;
-  // if (parent == NULL) {
-  //   parent = malloc(sizeof(parent_t));
-  //   parent->parent_addr = malloc(sizeof(linkaddr_t));
+  // if (node_type == NULL) {
+  //   node_type = malloc(sizeof(uint8_t));
+  //   *node_type = SUB_GATEWAY;
   // }
-  if (node_type == NULL) {
-    node_type = malloc(sizeof(uint8_t));
-    *node_type = SUB_GATEWAY;
-  }
+  node_type = SUB_GATEWAY;
 
   setup = 0;
   type_parent = SUB_GATEWAY;

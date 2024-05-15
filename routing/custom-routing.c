@@ -22,11 +22,11 @@ void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, p
 
   // Sending setup ack to the parent
   LOG_INFO("Sending setup ack control packet\n");
-  LOG_INFO("Node type: %u\n", *node_type);
+  LOG_INFO("Node type: %u\n", node_type);
   uint8_t data[sizeof(linkaddr_t) + 1];
   data[0] = type;
   memcpy(data + 1, &linkaddr_node_addr, sizeof(linkaddr_t));
-  control_packet_send(*node_type, &parent->parent_addr, SETUP_ACK, sizeof(linkaddr_t) + 1, data);
+  control_packet_send(node_type, &parent->parent_addr, SETUP_ACK, sizeof(linkaddr_t) + 1, data);
 }
 
 void set_child(const linkaddr_t* src, uint8_t* data) {
@@ -254,11 +254,9 @@ void control_packet_send(uint8_t node_type, linkaddr_t* dest, uint8_t response_t
   LOG_INFO("Node type: %u\n", header.node_type);
   LOG_INFO("Response type: %u\n", header.response_type);
 
-  // uint8_t* data = malloc(sizeof(uint8_t)*(len_of_data + 1));  
   uint8_t data[8];
   packing_control_packet(&control_packet, data, len_of_data);
 
-  // uint8_t* output = malloc(sizeof(uint8_t)*(len_of_data + 1) + 2*sizeof(linkaddr_t));
   uint8_t output[16];
   if (dest == NULL) {
     packing_packet(output, &linkaddr_node_addr, &null_addr, data, len_of_data + 1 + 2*sizeof(linkaddr_t));
@@ -542,4 +540,18 @@ void print_control_packet(control_packet_t* control_packet) {
   LOG_INFO("Node type: %u\n", control_packet->header->node_type);
   LOG_INFO("Response type: %u\n", control_packet->header->response_type);
   LOG_INFO("Data: %p\n", control_packet->data);
+}
+
+void print_children() {
+  LOG_INFO("Children\n");
+  for (uint8_t i = 0; i < children_count; i++) {
+    LOG_INFO("Child %u\n", i);
+    LOG_INFO("Address: ");
+    LOG_INFO_LLADDR(&children[i].addr);
+    LOG_INFO("\n");
+    LOG_INFO("From: ");
+    LOG_INFO_LLADDR(&children[i].from);
+    LOG_INFO("\n");
+    LOG_INFO("Type: %u\n", children[i].type);
+  }
 }

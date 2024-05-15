@@ -66,10 +66,11 @@ void input_callback(const void *data, uint16_t len,
 PROCESS_THREAD(gateway_process, ev, data)
 {
   static struct etimer periodic_timer;
-  if (node_type == NULL) {
-    node_type = malloc(sizeof(uint8_t));
-    *node_type = SUB_GATEWAY;
-  }
+  // if (node_type == NULL) {
+  //   node_type = malloc(sizeof(uint8_t));
+  //   *node_type = SUB_GATEWAY;
+  // }
+  node_type = GATEWAY;
 
   setup = 0;
   type_parent = GATEWAY;
@@ -85,6 +86,7 @@ PROCESS_THREAD(gateway_process, ev, data)
   while(1) {
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
     LOG_INFO("Running....\n");
+    print_children();
     etimer_reset(&periodic_timer);
   }
   LOG_INFO("Gateway process ended\n");

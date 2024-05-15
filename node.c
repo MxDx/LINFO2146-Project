@@ -25,31 +25,41 @@ parent_t* parent;
 void input_callback(const void *data, uint16_t len,
   const linkaddr_t *src, const linkaddr_t *dest)
 {
+  packet_t packet;
+  process_packet(data, len, &packet);
+
+  LOG_INFO("Received packet\n");
+  LOG_INFO("From: ");
+  LOG_INFO_LLADDR(&packet.src);
+  LOG_INFO_("\n");
+  LOG_INFO("To: ");
+  LOG_INFO_LLADDR(&packet.dest);
+  LOG_INFO_("\n");
+  
   if (
-    !linkaddr_cmp(dest, &linkaddr_node_addr) &&
-    !linkaddr_cmp(dest, &linkaddr_null)
+    !linkaddr_cmp(&packet.dest, &linkaddr_node_addr) &&
+    !linkaddr_cmp(&packet.dest, &null_addr)
   ) {
     LOG_INFO("Ignoring packet not for me\n");
     return;
   }
 
+
+  uint8_t packet_type;
+  process_node_packet(data + 2*sizeof(linkaddr_t), len, &packet.src, &packet.dest, &packet_type, &parent);
   LOG_INFO("Received packet\n");
-  // uint8_t* packet_type = malloc(sizeof(uint8_t));
-  // process_node_packet(data, len, src, dest, packet_type, parent); 
 }
 
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(node_process, ev, data)
 {
   static struct etimer periodic_timer;
-  if (parent == NULL) {
-    parent = malloc(sizeof(parent_t));
-    parent->parent_addr = malloc(sizeof(linkaddr_t));
-  }
-  if (node_type == NULL) {
-    node_type = malloc(sizeof(uint8_t));
-    *node_type = SUB_GATEWAY;
-  }
+  // if (node_type == NULL) {
+  //   node_type = malloc(sizeof(uint8_t));
+  //   *node_type = NODE;
+  // }
+
+  node_type = NODE;
 
   setup = 0;
   type_parent = NODE;

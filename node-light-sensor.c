@@ -61,10 +61,11 @@ PROCESS_THREAD(light_sensor_process, ev, data)
 {
   static struct etimer periodic_timer;
   // If the parent is already allocated we don't need to allocate it again
-  if (node_type == NULL) {
-    node_type = malloc(sizeof(uint8_t));
-    *node_type = SUB_GATEWAY;
-  }
+  // if (node_type == NULL) {
+  //   node_type = malloc(sizeof(uint8_t));
+  //   *node_type = NODE;
+  // }
+  node_type = NODE;
 
   setup = 0;
   type_parent = NODE;

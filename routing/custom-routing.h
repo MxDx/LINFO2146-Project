@@ -92,8 +92,8 @@ typedef struct {
 static uint8_t setup = 0;
 // Maybe not needed
 static uint8_t type_parent = 0;
-static uint8_t* node_type;
 static linkaddr_t null_addr =         {{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }};
+static uint8_t node_type = 0;
 
 
 /* Routing functions */ 
@@ -307,6 +307,11 @@ void print_data_packet(data_packet_t* data_packet);
  * @param control_header control header to print
  */
 void print_control_header(control_header_t* control_header);
+
+/**
+ * @brief Print the children of a node
+ */
+void print_children();
 
 
 #endif /* CUSTOM_ROUTING_H */
