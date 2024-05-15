@@ -74,16 +74,18 @@ PROCESS_THREAD(light_sensor_process, ev, data)
   nullnet_set_input_callback(input_callback);
   
   static struct etimer periodic_timer_setup;
-  etimer_set(&periodic_timer_setup, SEND_INTERVAL);
-  while (not_setup()) {
-    etimer_reset(&periodic_timer_setup);
-    init_node();
-    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer_setup));
-  }
 
   etimer_set(&periodic_timer, SEND_INTERVAL);
+  etimer_set(&periodic_timer_setup, SEND_INTERVAL);
   while(1) {
+    while (not_setup()) {
+      etimer_reset(&periodic_timer_setup);
+      etimer_reset(&periodic_timer);
+      init_node();
+      PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer_setup));
+    }
     etimer_reset(&periodic_timer);
+    etimer_reset(&periodic_timer_setup);
     // Sending random light sensor data
     char* topic = "light";
     uint16_t len_topic = strlen(topic);
@@ -94,7 +96,7 @@ PROCESS_THREAD(light_sensor_process, ev, data)
     sprintf(light_intensity_str, "%d", light_intensity);
     uint16_t len_data = strlen(light_intensity_str);
 
-    send_data_packet(len_topic, len_data, topic, light_intensity_str, &parent);    
+    send_data_packet(len_topic, len_data, topic, light_intensity_str, &parent, NODE);    
     LOG_INFO("Packet sent\n");
 
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));

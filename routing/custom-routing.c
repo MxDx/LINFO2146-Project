@@ -7,6 +7,8 @@
 static child_t children[16];
 static uint8_t children_count = 0;
 
+static uint8_t data_counter = 0;
+
 /*---------------------------------------------------------------------------*/
 void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, parent_t* parent, uint8_t node_type) {
   linkaddr_copy(&parent->parent_addr, parent_addr);
@@ -34,17 +36,31 @@ void set_child(const linkaddr_t* src, uint8_t* data) {
   new_child.addr = ((linkaddr_t*) (data + 2))[0];
   new_child.from = *src;
   new_child.type = data[1];
+
+  linkaddr_t old_nexthop;
+  int old_index = get_children(&new_child.addr, &old_nexthop);
+
+  if (old_index != -1) {
+    if (!linkaddr_cmp(&old_nexthop, src)) {
+      LOG_INFO("TODO : send remove signal here\n");
+    }
+    children[old_index] = new_child;
+    LOG_INFO("Updating child\n");
+    return;
+  }
+
   children[children_count] = new_child;
   children_count++;
 }
 
-void get_children(const linkaddr_t* src, linkaddr_t* nexthop) {
+int get_children(const linkaddr_t* src, linkaddr_t* nexthop) {
   for (uint8_t i = 0; i < children_count; i++) {
     if (linkaddr_cmp(&children[i].addr, src)) {
       *nexthop = children[i].from;
-      return;
+      return i;
     }
   }
+  return -1;
 }
 
 void send_child(child_t child, uint8_t node_type, parent_t* parent) {
@@ -171,7 +187,7 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
 
 
 /*---------------------------------------------------------------------------*/
-void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* input_data, parent_t* parent) {
+void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* input_data, parent_t* parent, uint8_t node_type) {
   data_packet_t data_packet;
   build_data_header(&data_packet, len_topic, len_data, topic, input_data);
   
@@ -200,6 +216,16 @@ void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* 
 
   free(data_packet.topic);
   free(data_packet.data);
+
+  LOG_INFO("Data counter value at send: %u", data_counter);
+
+  data_counter++;
+
+  if (data_counter > UNACK_TRESH) {
+    LOG_INFO("connection to parent lost");
+    setup = 0;
+    data_counter = 0;
+  }
 
   // free(data);
   // free(output);
@@ -251,6 +277,26 @@ void process_control_header(const uint8_t *data, uint16_t len, control_header_t*
   control_header->type = header >> 7;
   control_header->node_type = (header >> 5) & 0b11;
   control_header->response_type = (header >> 3) & 0b11;
+}
+
+
+void process_data_ack(const uint8_t* data, linkaddr_t* src){
+  linkaddr_t dest =*((linkaddr_t*) (data+1));
+  if (linkaddr_cmp(&dest, &linkaddr_node_addr)){
+    LOG_INFO("Ack reached destination\n");
+    data_counter--;
+    LOG_INFO("Counter value %u\n", data_counter);
+    return;
+  }
+  linkaddr_t nexthop;
+  get_children(&dest, &nexthop);
+  if (linkaddr_cmp(&nexthop, NULL)) {
+    LOG_INFO("No children found\n");
+    return;
+  }
+  
+  control_packet_send(0, &nexthop, DATA_ACK, sizeof(linkaddr_t), &dest);
+
 }
 /*---------------------------------------------------------------------------*/
 
@@ -507,23 +553,6 @@ void process_sub_gateway_packet(const uint8_t* data, uint16_t len, linkaddr_t *s
     forward_data_packet(data, len, parent);
     return;
   }
-}
-
-void process_data_ack(const uint8_t* data, linkaddr_t* src){
-  linkaddr_t dest =*((linkaddr_t*) (data+1));
-  if (linkaddr_cmp(&dest, &linkaddr_node_addr)){
-    LOG_INFO("Ack reached destination\n");
-    return;
-  }
-  linkaddr_t nexthop;
-  get_children(&dest, &nexthop);
-  if (linkaddr_cmp(&nexthop, NULL)) {
-    LOG_INFO("No children found\n");
-    return;
-  }
-  
-  control_packet_send(0, &nexthop, DATA_ACK, sizeof(linkaddr_t), &dest);
-
 }
 
 void process_gateway_packet(const void *data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type) {

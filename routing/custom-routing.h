@@ -21,6 +21,8 @@
 #define SETUP_ACK 0b10
 #define DATA_ACK 0b11
 
+#define UNACK_TRESH 1
+
 typedef struct {
     linkaddr_t addr;
     linkaddr_t from;
@@ -124,7 +126,7 @@ void set_child(const linkaddr_t* src, uint8_t* data);
  * @param src source address
  * @param nexthop next hop address
  */
-void get_children(const linkaddr_t* src, linkaddr_t* nexthop);
+int get_children(const linkaddr_t* src, linkaddr_t* nexthop);
 
 /**
  * @brief Send child to parent
@@ -209,7 +211,7 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
  * @param data data of the packet
  * @param parent parent node
  */
-void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* data, parent_t* parent);
+void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* data, parent_t* parent, uint8_t node_type);
 
 /**
  * @brief Forward a data packet to the parent node
