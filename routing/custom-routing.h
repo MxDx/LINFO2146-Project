@@ -20,6 +20,11 @@
 #define RESPONSE 0b01
 #define SETUP_ACK 0b10
 
+typedef struct {
+    linkaddr_t addr;
+    linkaddr_t from;
+    uint8_t type;
+} child_t;
 
 /* Structure for parent nodes
     - parent_addr: address of the parent node
@@ -52,7 +57,7 @@ typedef struct {
 */
 typedef struct {
     control_header_t* header;
-    uint8_t data;
+    void* data;
 } control_packet_t;
 
 /* Structure for data headers
@@ -90,6 +95,7 @@ static uint8_t type_parent = 0;
 static uint8_t* node_type;
 static linkaddr_t null_addr =         {{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }};
 
+
 /* Routing functions */ 
 /*---------------------------------------------------------------------------*/
 
@@ -103,6 +109,17 @@ static linkaddr_t null_addr =         {{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0
  * @param parent parent node
  */
 void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, parent_t* parent);
+
+void set_child(const linkaddr_t* src, uint8_t* data);
+
+/**
+ * @brief Send child to parent
+ * 
+ * @param child child node
+ * @param node_type type of the node
+ * @param parent parent node
+ */
+void send_child(child_t child, uint8_t node_type, parent_t* parent);
 
 /**
  * @brief Check if the node is not setup
@@ -204,8 +221,9 @@ void build_control_header(control_header_t* control_header, uint8_t node_type, u
  * 
  * @param control_packet control packet pointer
  * @param data data of the packet
+ * @param len_of_data length of the data
  */
-void packing_control_packet(control_packet_t* control_packet, uint8_t* data);
+void packing_control_packet(control_packet_t* control_packet, uint8_t* data, uint16_t len_of_data);
 
 /**
  * @brief Process the control header of a packet
@@ -224,7 +242,7 @@ void process_control_header(const uint8_t *data, uint16_t len, control_header_t*
  * @param response_type type of the response
  * @param len_of_data length of the data
  */
-void control_packet_send(uint8_t node_type, linkaddr_t* dest, uint8_t response_type, uint16_t len_of_data); 
+void control_packet_send(uint8_t node_type, linkaddr_t* dest, uint8_t response_type, uint16_t len_of_data, void* control_data); 
 
 /**
  * @brief Check if the parent node is better than the current one and update it,

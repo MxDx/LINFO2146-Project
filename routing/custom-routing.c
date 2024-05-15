@@ -4,6 +4,8 @@
 #define LOG_LEVEL LOG_LEVEL_INFO
 
 /* Configuration */
+static child_t children[16];
+static uint8_t children_count = 0;
 
 /*---------------------------------------------------------------------------*/
 void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, parent_t* parent) {
@@ -21,7 +23,26 @@ void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, p
   // Sending setup ack to the parent
   LOG_INFO("Sending setup ack control packet\n");
   LOG_INFO("Node type: %u\n", *node_type);
-  control_packet_send(*node_type, &parent->parent_addr, SETUP_ACK, 0);
+  uint8_t data[sizeof(linkaddr_t) + 1];
+  data[0] = type;
+  memcpy(data + 1, &linkaddr_node_addr, sizeof(linkaddr_t));
+  control_packet_send(*node_type, &parent->parent_addr, SETUP_ACK, sizeof(linkaddr_t) + 1, data);
+}
+
+void set_child(const linkaddr_t* src, uint8_t* data) {
+  child_t new_child;
+  new_child.addr = ((linkaddr_t*) (data + 2))[0];
+  new_child.from = *src;
+  new_child.type = data[1];
+  children[children_count] = new_child;
+  children_count++;
+}
+
+void send_child(child_t child, uint8_t node_type, parent_t* parent) {
+  uint8_t data[sizeof(linkaddr_t) + 1];
+  data[0] = child.type;
+  memcpy(data + 1, &child.addr, sizeof(linkaddr_t));
+  control_packet_send(node_type, &parent->parent_addr, SETUP_ACK, sizeof(linkaddr_t) + 1, data);
 }
 
 uint8_t not_setup() {
@@ -33,7 +54,7 @@ void init_node() {
   LOG_INFO("To: ");
   LOG_INFO_LLADDR(NULL);
   LOG_INFO_("\n");
-  control_packet_send(NODE, NULL, SETUP, 0);
+  control_packet_send(NODE, NULL, SETUP, 0, NULL);
 }
 
 void init_sub_gateway() {
@@ -41,7 +62,7 @@ void init_sub_gateway() {
   LOG_INFO("To: ");
   LOG_INFO_LLADDR(NULL);
   LOG_INFO_("\n");
-  control_packet_send(SUB_GATEWAY, NULL, SETUP, 0);
+  control_packet_send(SUB_GATEWAY, NULL, SETUP, 0, NULL);
 }
 
 void init_gateway() {
@@ -49,7 +70,7 @@ void init_gateway() {
   LOG_INFO("To: ");
   LOG_INFO_LLADDR(NULL);
   LOG_INFO_("\n");
-  control_packet_send(GATEWAY, NULL, SETUP, 0);
+  control_packet_send(GATEWAY, NULL, SETUP, 0, NULL);
 }
 /*---------------------------------------------------------------------------*/
 
@@ -198,14 +219,13 @@ void build_control_header(control_header_t* control_header, uint8_t node_type, u
   control_header->response_type = response_type;
 }
 
-void packing_control_packet(control_packet_t* control_packet, uint8_t* data) {
+void packing_control_packet(control_packet_t* control_packet, uint8_t* data, uint16_t len_of_data) {
   data[0] = control_packet->header->type << 7;
   data[0] |= control_packet->header->node_type << 5;
   data[0] |= control_packet->header->response_type << 3;
 
   /* Adding the data */
-  // memcpy(data + 5, control_packet->data, control_packet->len_data);
-
+  memcpy(data + 1, control_packet->data, len_of_data);
 }
 
 void process_control_header(const uint8_t *data, uint16_t len, control_header_t* control_header) {
@@ -223,18 +243,20 @@ void process_control_header(const uint8_t *data, uint16_t len, control_header_t*
 
 
 /*---------------------------------------------------------------------------*/
-void control_packet_send(uint8_t node_type, linkaddr_t* dest, uint8_t response_type, uint16_t len_of_data) {
+void control_packet_send(uint8_t node_type, linkaddr_t* dest, uint8_t response_type, uint16_t len_of_data, void* control_data) {
   control_packet_t control_packet;
   control_header_t header;
   build_control_header(&header, node_type, response_type, dest);
   control_packet.header = &header;
+  control_packet.data = control_data;
+
   LOG_INFO("Sending control packet\n");
   LOG_INFO("Node type: %u\n", header.node_type);
   LOG_INFO("Response type: %u\n", header.response_type);
 
   // uint8_t* data = malloc(sizeof(uint8_t)*(len_of_data + 1));  
   uint8_t data[8];
-  packing_control_packet(&control_packet, data);
+  packing_control_packet(&control_packet, data, len_of_data);
 
   // uint8_t* output = malloc(sizeof(uint8_t)*(len_of_data + 1) + 2*sizeof(linkaddr_t));
   uint8_t output[16];
@@ -358,7 +380,7 @@ void process_node_packet(const void *data, uint16_t len, linkaddr_t *src, linkad
     */
     if (!not_setup() && header.response_type == SETUP) {
       LOG_INFO("Sending response control packet\n");
-      control_packet_send(NODE, src, RESPONSE, 0);
+      control_packet_send(NODE, src, RESPONSE, 0, NULL);
       return;
     }
 
@@ -374,10 +396,19 @@ void process_node_packet(const void *data, uint16_t len, linkaddr_t *src, linkad
     }
 
     if (header.response_type == SETUP_ACK) {
+      set_child(src, (uint8_t*)data);
+      child_t new_child = children[children_count - 1];
+
+      /* Forwarding child to gateway */
+      send_child(new_child, NODE, parent);
+
       LOG_INFO("Received setup ack control packet\n");
       LOG_INFO("New children at address: ");
-      LOG_INFO_LLADDR(src);
-      LOG_INFO_("\n");
+      LOG_INFO_LLADDR(&new_child.addr);
+      LOG_INFO("\n");
+      LOG_INFO("From: ");
+      LOG_INFO_LLADDR(&new_child.from);
+      LOG_INFO("\n");
       return;
     }
 
@@ -416,10 +447,19 @@ void process_sub_gateway_packet(const uint8_t* data, uint16_t len, linkaddr_t *s
     LOG_INFO("Response type: %u\n", header.response_type);
 
     if (header.response_type == SETUP_ACK) {
+      set_child(src, (uint8_t*)data);
+      child_t new_child = children[children_count - 1];
+
+      /* Forwarding child to gateway */
+      send_child(new_child, SUB_GATEWAY, parent);
+
       LOG_INFO("Received setup ack control packet\n");
       LOG_INFO("New children at address: ");
-      LOG_INFO_LLADDR(src);
-      LOG_INFO_("\n");
+      LOG_INFO_LLADDR(&new_child.addr);
+      LOG_INFO("\n");
+      LOG_INFO("From: ");
+      LOG_INFO_LLADDR(&new_child.from);
+      LOG_INFO("\n");
       return;
     }
 
@@ -430,7 +470,7 @@ void process_sub_gateway_packet(const uint8_t* data, uint16_t len, linkaddr_t *s
 
     if (!not_setup() && header.response_type == SETUP) {
       LOG_INFO("Sending back a control packet\n");
-      control_packet_send(SUB_GATEWAY, src, RESPONSE, 0);
+      control_packet_send(SUB_GATEWAY, src, RESPONSE, 0, NULL);
       return;
     }
   }
@@ -460,16 +500,22 @@ void process_gateway_packet(const void *data, uint16_t len, linkaddr_t *src, lin
     }
 
     if (header.response_type == SETUP_ACK) {
+      set_child(src, (uint8_t*)data);
+      child_t new_child = children[children_count - 1];
       LOG_INFO("Received setup ack control packet\n");
       LOG_INFO("New children at address: ");
-      LOG_INFO_LLADDR(src);
-      LOG_INFO_("\n");
+      LOG_INFO_LLADDR(&new_child.addr);
+      LOG_INFO("\n");
+      LOG_INFO("From: ");
+      LOG_INFO_LLADDR(&new_child.from);
+      LOG_INFO("\n");
+      LOG_INFO("New child type %u\n", new_child.type);
       return;
     }
 
     if (header.response_type == SETUP) {
       LOG_INFO("Sending back a control packet\n");
-      control_packet_send(GATEWAY, src, RESPONSE, 0);
+      control_packet_send(GATEWAY, src, RESPONSE, 0, NULL);
       return;
     }
   }
@@ -495,5 +541,5 @@ void print_control_packet(control_packet_t* control_packet) {
   LOG_INFO("Type: %u\n", control_packet->header->type);
   LOG_INFO("Node type: %u\n", control_packet->header->node_type);
   LOG_INFO("Response type: %u\n", control_packet->header->response_type);
-  LOG_INFO("Data: %u\n", control_packet->data);
+  LOG_INFO("Data: %p\n", control_packet->data);
 }
