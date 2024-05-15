@@ -19,6 +19,7 @@
 #define SETUP 0b00
 #define RESPONSE 0b01
 #define SETUP_ACK 0b10
+#define DATA_ACK 0b11
 
 typedef struct {
     linkaddr_t addr;
@@ -116,6 +117,14 @@ void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, p
  * @param data data of the packet
  */
 void set_child(const linkaddr_t* src, uint8_t* data);
+
+/**
+ * @brief Get the children of a node
+ * 
+ * @param src source address
+ * @param nexthop next hop address
+ */
+void get_children(const linkaddr_t* src, linkaddr_t* nexthop);
 
 /**
  * @brief Send child to parent
@@ -284,6 +293,9 @@ void process_node_packet(const void *data, uint16_t len, linkaddr_t *src, linkad
  * @param parent parent node
 */
 void process_sub_gateway_packet(const uint8_t* data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type, parent_t* parent);
+
+
+void process_data_ack(const uint8_t* data, linkaddr_t* src);
 
 /**
  * @brief Process a packet and determine its type, if it is a control

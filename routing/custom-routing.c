@@ -38,6 +38,15 @@ void set_child(const linkaddr_t* src, uint8_t* data) {
   children_count++;
 }
 
+void get_children(const linkaddr_t* src, linkaddr_t* nexthop) {
+  for (uint8_t i = 0; i < children_count; i++) {
+    if (linkaddr_cmp(&children[i].addr, src)) {
+      *nexthop = children[i].from;
+      return;
+    }
+  }
+}
+
 void send_child(child_t child, uint8_t node_type, parent_t* parent) {
   uint8_t data[sizeof(linkaddr_t) + 1];
   data[0] = child.type;
@@ -460,6 +469,10 @@ void process_sub_gateway_packet(const uint8_t* data, uint16_t len, linkaddr_t *s
       return;
     }
 
+    if (header.response_type == DATA_ACK) {
+      process_data_ack(data, src);
+    }
+
     if (header.response_type <= 1 && header.node_type == GATEWAY) {
       check_parent_sub_gateway(src, header.node_type, parent);
       return;
@@ -471,6 +484,23 @@ void process_sub_gateway_packet(const uint8_t* data, uint16_t len, linkaddr_t *s
       return;
     }
   }
+}
+
+void process_data_ack(const uint8_t* data, linkaddr_t* src){
+  linkaddr_t dest =*((linkaddr_t*) (data+1));
+  if (linkaddr_cmp(dest, link)){
+    LOG_INFO("Ack reached destination\n");
+    return;
+  }
+  linkaddr_t nexthop;
+  get_children(&dest, &nexthop);
+  if (linkaddr_cmp(&nexthop, NULL)) {
+    LOG_INFO("No children found\n");
+    return;
+  }
+  
+  control_packet_send(0, &nexthop, DATA_ACK, sizeof(linkaddr_t), &dest);
+
 }
 
 void process_gateway_packet(const void *data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type) {
@@ -515,6 +545,19 @@ void process_gateway_packet(const void *data, uint16_t len, linkaddr_t *src, lin
       control_packet_send(GATEWAY, src, RESPONSE, 0, NULL);
       return;
     }
+  }
+
+  if (*packet_type == DATA) {
+    LOG_INFO("Received data packet\n");
+    linkaddr_t nexthop;
+    get_children(src, &nexthop);
+    if (linkaddr_cmp(&nexthop, NULL)) {
+      LOG_INFO("No children found\n");
+      return;
+    }
+
+    control_packet_send(GATEWAY, &nexthop, DATA_ACK, sizeof(linkaddr_t), src);
+
   }
 }
 /*---------------------------------------------------------------------------*/
