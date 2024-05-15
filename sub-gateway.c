@@ -55,12 +55,7 @@ void input_callback(const void *data, uint16_t len,
 
 
   uint8_t packet_type;
-  process_sub_gateway_packet(data + 2*sizeof(linkaddr_t), len, &packet.src, &packet.dest, &packet_type, &parent);
-
-  if (packet_type == DATA) {
-    LOG_INFO("Received data packet\n");
-    forward_data_packet(data, len, &parent);
-  } 
+  process_sub_gateway_packet(data, len, &packet.src, &packet.dest, &packet_type, &parent);
 
 }
 

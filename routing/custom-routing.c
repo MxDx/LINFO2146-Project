@@ -206,9 +206,13 @@ void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* 
 }
 
 void forward_data_packet(const void *data, uint16_t len, parent_t* parent) {
+  uint8_t *d = (uint8_t *) data;
+  LOG_INFO("data[0] = %u\n", d[0]);
   /* Changing the dest value to the address of the parent */
   ((linkaddr_t*)data)[1] = parent->parent_addr;
-  
+  linkaddr_t test = *((linkaddr_t*)data);
+  LOG_INFO_LLADDR(&test);
+  LOG_INFO("\n");
   nullnet_buf = (uint8_t *)data;
   nullnet_len = len;
 
@@ -363,15 +367,17 @@ void process_node_packet(const void *data, uint16_t len, linkaddr_t *src, linkad
     LOG_INFO("Empty packet\n");
     return;
   }
+  
+  const void* data_strip = data + sizeof(linkaddr_t) * 2;
 
-  uint8_t head = ((uint8_t *)data)[0];
+  uint8_t head = ((uint8_t *)data_strip)[0];
   *packet_type = head >> 7;
   LOG_INFO("Packet type: %u\n", *packet_type);
 
   if (*packet_type == CONTROL) {
     LOG_INFO("Received control packet\n");
     control_header_t header;
-    process_control_header(data, len, &header);
+    process_control_header(data_strip, len, &header);
     LOG_INFO("Node type: %u\n", header.node_type);
     LOG_INFO("Response type: %u\n", header.response_type);
 
@@ -402,7 +408,7 @@ void process_node_packet(const void *data, uint16_t len, linkaddr_t *src, linkad
     }
 
     if (header.response_type == SETUP_ACK) {
-      set_child(src, (uint8_t*)data);
+      set_child(src, (uint8_t*)data_strip);
       child_t new_child = children[children_count - 1];
 
       /* Forwarding child to gateway */
@@ -415,6 +421,11 @@ void process_node_packet(const void *data, uint16_t len, linkaddr_t *src, linkad
       LOG_INFO("From: ");
       LOG_INFO_LLADDR(&new_child.from);
       LOG_INFO("\n");
+      return;
+    }
+
+    if (header.response_type == DATA_ACK) {
+      process_data_ack(data_strip, src);
       return;
     }
 
@@ -439,7 +450,9 @@ void process_sub_gateway_packet(const uint8_t* data, uint16_t len, linkaddr_t *s
     return;
   }
 
-  uint8_t head = ((uint8_t *)data)[0];
+  const void* data_strip = data + sizeof(linkaddr_t) * 2;
+
+  uint8_t head = ((uint8_t *)data_strip)[0];
   uint8_t type = head >> 7;
   memcpy(packet_type, &type, sizeof(uint8_t));
   LOG_INFO("Packet type: %u\n", *packet_type);
@@ -448,12 +461,12 @@ void process_sub_gateway_packet(const uint8_t* data, uint16_t len, linkaddr_t *s
     LOG_INFO("Received control packet\n");
     control_header_t header;
     LOG_INFO("Processing control header\n");
-    process_control_header(data, len, &header);
+    process_control_header(data_strip, len, &header);
     LOG_INFO("Node type: %u\n", header.node_type);
     LOG_INFO("Response type: %u\n", header.response_type);
 
     if (header.response_type == SETUP_ACK) {
-      set_child(src, (uint8_t*)data);
+      set_child(src, (uint8_t*)data_strip);
       child_t new_child = children[children_count - 1];
 
       /* Forwarding child to gateway */
@@ -470,7 +483,8 @@ void process_sub_gateway_packet(const uint8_t* data, uint16_t len, linkaddr_t *s
     }
 
     if (header.response_type == DATA_ACK) {
-      process_data_ack(data, src);
+      process_data_ack(data_strip, src);
+      return;
     }
 
     if (header.response_type <= 1 && header.node_type == GATEWAY) {
@@ -484,11 +498,20 @@ void process_sub_gateway_packet(const uint8_t* data, uint16_t len, linkaddr_t *s
       return;
     }
   }
+
+  if (not_setup()) {
+    return;
+  }
+
+  if (*packet_type == DATA) {
+    forward_data_packet(data, len, parent);
+    return;
+  }
 }
 
 void process_data_ack(const uint8_t* data, linkaddr_t* src){
   linkaddr_t dest =*((linkaddr_t*) (data+1));
-  if (linkaddr_cmp(dest, link)){
+  if (linkaddr_cmp(&dest, &linkaddr_node_addr)){
     LOG_INFO("Ack reached destination\n");
     return;
   }
