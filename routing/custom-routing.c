@@ -5,18 +5,15 @@
 
 /* Configuration */
 
-// uint64_t packet_space;
-// uint64_t playing_space;
-
 /*---------------------------------------------------------------------------*/
 void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, parent_t* parent) {
-  linkaddr_copy(parent->parent_addr, parent_addr);
+  linkaddr_copy(&parent->parent_addr, parent_addr);
   type_parent = type;
   parent->type = type;
   parent->rssi = rssi;
 
   LOG_INFO("Parent address: ");
-  LOG_INFO_LLADDR(parent_addr);
+  LOG_INFO_LLADDR(&parent->parent_addr);
   LOG_INFO_("\n");
   LOG_INFO("Parent type: %u\n", type);
   LOG_INFO("Parent rssi: %d\n", rssi);
@@ -24,7 +21,7 @@ void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, p
   // Sending setup ack to the parent
   LOG_INFO("Sending setup ack control packet\n");
   LOG_INFO("Node type: %u\n", *node_type);
-  control_packet_send(*node_type, parent->parent_addr, SETUP_ACK, 0);
+  control_packet_send(*node_type, &parent->parent_addr, SETUP_ACK, 0);
 }
 
 uint8_t not_setup() {
@@ -40,7 +37,7 @@ void init_node() {
 }
 
 void init_sub_gateway() {
-  LOG_INFO("Sending setup control packet (gateway)\n");
+  LOG_INFO("Sending setup control packet (sub-gateway)\n");
   LOG_INFO("To: ");
   LOG_INFO_LLADDR(NULL);
   LOG_INFO_("\n");
@@ -152,39 +149,44 @@ void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* 
   LOG_INFO("Sending data packet\n");
   print_data_packet(&data_packet);
 
-  uint8_t* data = malloc(sizeof(uint8_t)*(len_topic + len_data + 4));
+  // uint8_t* data = malloc(sizeof(uint8_t)*(len_topic + len_data + 4));
+  uint8_t data[8];
   LOG_INFO("Before packing data packet\n");
   packing_data_packet(&data_packet, data);
 
-  uint8_t* output = malloc(sizeof(uint8_t)*(len_topic + len_data + 4) + 2*sizeof(linkaddr_t));
+  // uint8_t* output = malloc(sizeof(uint8_t)*(len_topic + len_data + 4) + 2*sizeof(linkaddr_t));
+  uint8_t output[16];
   LOG_INFO("Before packing\n");
-  packing_packet(output, &linkaddr_node_addr, parent->parent_addr, data, len_topic + len_data + 4 + 2*sizeof(linkaddr_t));
+  packing_packet(output, &linkaddr_node_addr, &parent->parent_addr, data, len_topic + len_data + 4 + 2*sizeof(linkaddr_t));
 
-  nullnet_buf = (uint8_t *)output;
+  nullnet_buf = output;
   nullnet_len = 2*sizeof(linkaddr_t) + 4 + len_topic + len_data;
 
-  const linkaddr_t* dest = parent->parent_addr;
+  const linkaddr_t dest = parent->parent_addr;
   LOG_INFO("Sending data packet to: ");
-  LOG_INFO_LLADDR(dest);
+  LOG_INFO_LLADDR(&dest);
   LOG_INFO_("\n");
-  NETSTACK_NETWORK.output(dest);
+  NETSTACK_NETWORK.output(&dest);
 
   free(data_packet.topic);
   free(data_packet.data);
 
-  free(data);
-  free(output);
+  // free(data);
+  // free(output);
 }
 
 void forward_data_packet(const void *data, uint16_t len, parent_t* parent) {
+  /* Changing the dest value to the address of the parent */
+  ((linkaddr_t*)data)[1] = parent->parent_addr;
+  
   nullnet_buf = (uint8_t *)data;
   nullnet_len = len;
 
-  const linkaddr_t* dest = parent->parent_addr;
+  const linkaddr_t dest = parent->parent_addr;
   LOG_INFO("Forwarding data packet to: ");
-  LOG_INFO_LLADDR(dest);
+  LOG_INFO_LLADDR(&dest);
   LOG_INFO_("\n");
-  NETSTACK_NETWORK.output(dest);
+  NETSTACK_NETWORK.output(&dest);
 }
 /*---------------------------------------------------------------------------*/
 
@@ -230,10 +232,12 @@ void control_packet_send(uint8_t node_type, linkaddr_t* dest, uint8_t response_t
   LOG_INFO("Node type: %u\n", header.node_type);
   LOG_INFO("Response type: %u\n", header.response_type);
 
-  uint8_t* data = malloc(sizeof(uint8_t)*(len_of_data + 1));  
+  // uint8_t* data = malloc(sizeof(uint8_t)*(len_of_data + 1));  
+  uint8_t data[8];
   packing_control_packet(&control_packet, data);
 
-  uint8_t* output = malloc(sizeof(uint8_t)*(len_of_data + 1) + 2*sizeof(linkaddr_t));
+  // uint8_t* output = malloc(sizeof(uint8_t)*(len_of_data + 1) + 2*sizeof(linkaddr_t));
+  uint8_t output[16];
   if (dest == NULL) {
     packing_packet(output, &linkaddr_node_addr, &null_addr, data, len_of_data + 1 + 2*sizeof(linkaddr_t));
     LOG_INFO("Sending control packet to null\n");
@@ -244,18 +248,19 @@ void control_packet_send(uint8_t node_type, linkaddr_t* dest, uint8_t response_t
     packing_packet(output, &linkaddr_node_addr, dest, data, len_of_data + 1 + 2*sizeof(linkaddr_t));
   }
 
-  nullnet_buf = (uint8_t *)output;
+  // memcpy(nullnet_buf, packet_space, 2*sizeof(linkaddr_t) + len_of_data + 1);
+  nullnet_buf = output;
   nullnet_len = sizeof(linkaddr_t)*2 + len_of_data + 1;
 
-  LOG_INFO("Sending control packet to coucou: ");
+  LOG_INFO("Sending control packet to: ");
   LOG_INFO_LLADDR(dest);
   LOG_INFO_("\n");
 
   NETSTACK_NETWORK.output(dest);
 
   /* Freeing everything */
-  free(data);
-  free(output);
+  // free(data);
+  // free(output);
 }
 
 void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* parent) {

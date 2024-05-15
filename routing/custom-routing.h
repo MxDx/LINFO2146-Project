@@ -28,7 +28,7 @@
             it does not work with it (for some reason)
 */
 typedef struct {
-    linkaddr_t* parent_addr;
+    linkaddr_t parent_addr;
     signed char rssi;
     uint8_t type;
 } parent_t;

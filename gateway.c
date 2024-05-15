@@ -30,10 +30,10 @@ parent_t* parent;
 void input_callback(const void *data, uint16_t len,
   const linkaddr_t *src, const linkaddr_t *dest)
 {
+  LOG_INFO("Received packet\n");
   packet_t packet;
   process_packet(data, len, &packet);
 
-  LOG_INFO("Received packet\n");
   LOG_INFO("From: ");
   LOG_INFO_LLADDR(&packet.src);
   LOG_INFO_("\n");
@@ -66,10 +66,6 @@ void input_callback(const void *data, uint16_t len,
 PROCESS_THREAD(gateway_process, ev, data)
 {
   static struct etimer periodic_timer;
-  if (parent == NULL) {
-    parent = malloc(sizeof(parent_t));
-    parent->parent_addr = malloc(sizeof(linkaddr_t));
-  }
   if (node_type == NULL) {
     node_type = malloc(sizeof(uint8_t));
     *node_type = SUB_GATEWAY;
