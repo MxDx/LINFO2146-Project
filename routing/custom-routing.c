@@ -6,13 +6,10 @@
 /* Configuration */
 
 /*---------------------------------------------------------------------------*/
-parent_t* get_parent() {
-  return parent;
-}
-
-void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi) {
+void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, parent_t* parent) {
   linkaddr_copy(parent->parent_addr, parent_addr);
   type_parent = type;
+  parent->type = type;
   parent->rssi = rssi;
 
   LOG_INFO("Parent address: ");
@@ -20,6 +17,7 @@ void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi) {
   LOG_INFO_("\n");
   LOG_INFO("Parent type: %u\n", type);
   LOG_INFO("Parent rssi: %d\n", rssi);
+  LOG_INFO("Parent pointer: %p\n", parent->parent_addr);
 }
 
 uint8_t not_setup() {
@@ -115,7 +113,7 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
 
 
 /*---------------------------------------------------------------------------*/
-void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* input_data) {
+void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* input_data, parent_t* parent) {
   data_packet_t* data_packet = malloc(sizeof(data_packet_t));
   build_data_header(data_packet, len_topic, len_data, topic, input_data);
 
@@ -135,7 +133,7 @@ void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* 
   NETSTACK_NETWORK.output(dest);
 }
 
-void forward_data_packet(const void *data, uint16_t len) {
+void forward_data_packet(const void *data, uint16_t len, parent_t* parent) {
   LOG_INFO("Forwarding data packet\n");
   nullnet_buf = (uint8_t *)data;
   nullnet_len = len;
@@ -200,7 +198,7 @@ void control_packet_send(uint8_t node_type, const linkaddr_t* dest, uint8_t resp
   NETSTACK_NETWORK.output(dest);
 }
 
-void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* parent_addr) {
+void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* parent) {
   /* Create new possible parent */
   signed char rssi = cc2420_last_rssi;
   LOG_INFO("type_parent: %u\n", type_parent);
@@ -210,17 +208,16 @@ void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* paren
     return;
   }
 
-  if (parent_addr == NULL) {
+  if (not_setup()) {
     setup = 1;
-    parent->parent_addr = malloc(sizeof(linkaddr_t));
-    set_parent(src, node_type, rssi);
+    set_parent(src, node_type, rssi, parent);
     LOG_INFO("First parent setup\n");
     return;
   }
 
   /* If the new parent is better than the current one */
-  if (parent_addr->parent_addr < src) {
-    set_parent(src, node_type, rssi);
+  if (parent->parent_addr < src) {
+    set_parent(src, node_type, rssi, parent);
     LOG_INFO("Better parent found\n");
     return;
   }
@@ -228,10 +225,10 @@ void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* paren
   /* If the new parent is the same as the current one */
   if (
       type_parent == node_type &&
-      parent_addr->rssi < rssi
+      parent->rssi < rssi
       ) 
   {
-    set_parent(src, node_type, rssi);
+    set_parent(src, node_type, rssi, parent);
     LOG_INFO("Better parent found\n");
     return;
   }
@@ -241,7 +238,7 @@ void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* paren
 
 
 /*---------------------------------------------------------------------------*/
-void process_node_packet(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest, uint8_t* packet_type) {
+void process_node_packet(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest, uint8_t* packet_type, parent_t* parent) {
   if (len == 0) {
     LOG_INFO("Empty packet\n");
     return;
@@ -260,6 +257,8 @@ void process_node_packet(const void *data, uint16_t len, const linkaddr_t *src, 
 
     if (header->node_type == SUB_GATEWAY && header->response_type == RESPONSE) {
       check_parent_node(src, header->node_type, parent);
+
+      LOG_INFO("Parent pointer after check parent node: %p\n", parent->parent_addr);
       return;
     }
 
@@ -287,12 +286,12 @@ void process_node_packet(const void *data, uint16_t len, const linkaddr_t *src, 
   }
 
   if (*packet_type == DATA) {
-    forward_data_packet(data, len);
+    forward_data_packet(data, len, parent);
     return;
   }
 }
 
-void process_sub_gateway_packet(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest, uint8_t* packet_type) {
+void process_sub_gateway_packet(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest, uint8_t* packet_type, parent_t* parent) {
   LOG_INFO("Processing sub gateway packet\n");
   if (len == 0) {
     LOG_INFO("Empty packet\n");
@@ -300,7 +299,8 @@ void process_sub_gateway_packet(const void *data, uint16_t len, const linkaddr_t
   }
 
   uint8_t head = ((uint8_t *)data)[0];
-  *packet_type = head >> 7;
+  uint8_t type = head >> 7;
+  memcpy(packet_type, &type, sizeof(uint8_t));
   LOG_INFO("Packet type: %u\n", *packet_type);
 
   if (*packet_type == CONTROL) {
@@ -309,10 +309,11 @@ void process_sub_gateway_packet(const void *data, uint16_t len, const linkaddr_t
     process_control_header(data, len, header);
     LOG_INFO("Node type: %u\n", header->node_type);
     LOG_INFO("Response type: %u\n", header->response_type);
+    signed char rssi = cc2420_last_rssi;
 
     if (not_setup() && header->response_type == RESPONSE && header->node_type == GATEWAY) {
-      set_parent(src, header->node_type, cc2420_last_rssi);
-      LOG_INFO("Setting up the gateway\n");
+      set_parent(src, GATEWAY, rssi, parent);
+      LOG_INFO("Setup sub-gateway\n");
       setup = 1;
       return;
     }

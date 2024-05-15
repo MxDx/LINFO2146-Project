@@ -75,19 +75,13 @@ typedef struct {
     char* data;
 } data_packet_t;
 
-static parent_t* parent;
+// static parent_t* parent;
 static uint8_t setup = 0;
 static uint8_t type_parent = 0;
 
 /* Routing functions */ 
 /*---------------------------------------------------------------------------*/
 
-/**
- * @brief Get the parent address
- * 
- * @return parent_t* parent address
- */
-parent_t* get_parent();
 
 /**
  * @brief Set the parent address
@@ -96,7 +90,7 @@ parent_t* get_parent();
  * @param rssi signal strength
  * @param type type of the parent node
  */
-void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi);
+void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, parent_t* parent);
 
 /**
  * @brief Check if the node is not setup
@@ -144,14 +138,6 @@ void build_data_header(data_packet_t* data_packet, uint16_t len_topic, uint16_t 
 void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t* data_packet);
 
 /**
- * @brief Forward a data packet to the parent node
- * 
- * @param data data of the packet
- * @param len length of the data
- */
-void forward_data_packet(const void *data, uint16_t len);
-
-/**
  * @brief Send a data packet to the parent node
  * 
  * @param len_topic length of the topic
@@ -159,7 +145,15 @@ void forward_data_packet(const void *data, uint16_t len);
  * @param topic topic of the data
  * @param data data of the packet
  */
-void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* data);
+void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* data, parent_t* parent);
+
+/**
+ * @brief Forward a data packet to the parent node
+ * 
+ * @param data data of the packet
+ * @param len length of the data
+ */
+void forward_data_packet(const void *data, uint16_t len, parent_t* parent);
 
 /**
  * @brief Build the control header of a packet
@@ -205,7 +199,7 @@ void control_packet_send(uint8_t node_type, const linkaddr_t* dest, uint8_t resp
  * @param parent_addr current parent node
  * @param setup setup flag
  */
-void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* parent_addr);
+void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* parent);
 
 /**
  * @brief Process a packet and determine its type, if it is a control
@@ -216,7 +210,7 @@ void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* paren
  * @param dest destination address
  * @param packet_type packet type pointer to store the type of the packet
 */
-void process_node_packet(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest, uint8_t* packet_type);
+void process_node_packet(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest, uint8_t* packet_type, parent_t* parent);
 
 /**
  * @brief Process a packet and determine its type, if it is a control
@@ -227,7 +221,7 @@ void process_node_packet(const void *data, uint16_t len, const linkaddr_t *src, 
  * @param dest destination address
  * @param packet_type packet type pointer to store the type of the packet
 */
-void process_sub_gateway_packet(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest, uint8_t* packet_type);
+void process_sub_gateway_packet(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest, uint8_t* packet_type, parent_t* parent);
 
 /**
  * @brief Process a packet and determine its type, if it is a control

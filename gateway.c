@@ -21,6 +21,8 @@
 PROCESS(gateway_process, "Gateway process");
 AUTOSTART_PROCESSES(&gateway_process);
 
+parent_t* parent;
+
 // static linkaddr_t parent_addr =         {{ 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }};
 
 /*---------------------------------------------------------------------------*/

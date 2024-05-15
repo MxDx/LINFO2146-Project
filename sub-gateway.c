@@ -21,6 +21,8 @@
 PROCESS(gateway_process, "Gateway process");
 AUTOSTART_PROCESSES(&gateway_process);
 
+parent_t* parent;
+
 // static linkaddr_t parent_addr =         {{ 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }};
 
 /*---------------------------------------------------------------------------*/
@@ -28,8 +30,19 @@ AUTOSTART_PROCESSES(&gateway_process);
 void input_callback(const void *data, uint16_t len,
   const linkaddr_t *src, const linkaddr_t *dest)
 {
+
+  LOG_INFO("Received packet\n");
+
   uint8_t* packet_type = malloc(sizeof(uint8_t));
-  process_sub_gateway_packet(data, len, src, dest, packet_type);
+
+  linkaddr_t* src_addr = malloc(sizeof(linkaddr_t));
+  linkaddr_t* dest_addr = malloc(sizeof(linkaddr_t));
+  void* data_cpy = malloc(len);
+  memcpy(src_addr, src, sizeof(linkaddr_t));
+  memcpy(dest_addr, dest, sizeof(linkaddr_t));
+  memcpy(data_cpy, data, len);
+
+  process_sub_gateway_packet(data_cpy, len, src_addr, dest_addr, packet_type, parent);
 
   if (*packet_type == DATA) {
     LOG_INFO("Received data packet\n");
@@ -67,6 +80,7 @@ PROCESS_THREAD(gateway_process, ev, data)
   etimer_set(&periodic_timer, SEND_INTERVAL);
   while(1) {
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
+    LOG_INFO("Running....\n");
     etimer_reset(&periodic_timer);
   }
   LOG_INFO("Gateway process ended\n");
