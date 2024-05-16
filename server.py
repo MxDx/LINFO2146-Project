@@ -4,6 +4,12 @@ import sys
 import time
 import paho.mqtt.client as mqtt_client
 
+# Global variables
+irrigation_time = 5         # Time in seconds
+light_treshold = 100        # Light treshold
+irrigation_every = 60       # Time in seconds
+
+
 def process_gateway_data(data, mqttc=None):
     # /barn_number/topic/=payload\n
     data = data.split("\n")
@@ -45,6 +51,7 @@ def main(ip, port, mqtt):
         if (topic != "lights" and topic != "irrigation"):
             return
         sock.send(f"/{barn_number}/{topic}/={msg.payload}\n".encode("utf-8"))
+        print(f"Sent: /{barn_number}/{topic}/={msg.payload}")
 
     if mqtt:
         mqttc = mqtt_client.Client(mqtt_client.CallbackAPIVersion.VERSION2)
@@ -53,7 +60,12 @@ def main(ip, port, mqtt):
 
         mqttc.connect("localhost", 1883, 60)
 
+    start_time = time.time()
     while True: 
+        if time.time() - start_time > irrigation_every:
+            print(f"Sending irrigation time: {irrigation_time}")
+            sock.send(f"/0/irrigation/={irrigation_time}\n".encode("utf-8"))
+            start_time = time.time()
         data = recv(sock)
         if mqtt:
             process_gateway_data(data.decode("utf-8"), mqttc)
@@ -62,7 +74,6 @@ def main(ip, port, mqtt):
             process_gateway_data(data.decode("utf-8"))
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--ip", dest="ip", type=str)
     parser.add_argument("--port", dest="port", type=int)

@@ -1,4 +1,3 @@
-
 #include "net/netstack.h"
 #include "net/nullnet/nullnet.h"
 #include <string.h>
@@ -86,6 +85,12 @@ void striping_data(char* message, char* barn_number, char* topic, char* data) {
 void decide_action(char* topic, char* data, uint8_t barn_number) {
   if (strcmp(topic, "lights") == 0) {
     send_data_packet(0, LIGHT_BULB_GROUP, strlen(topic), strlen(data), topic, data, &barns[barn_number], 0);
+  }
+
+  if (strcmp(topic, "irrigation") == 0) {
+    for (int i = 0; i < barns_size; i++) {
+      send_data_packet(0, IRRIGATION_GROUP, strlen(topic), strlen(data), topic, data, &barns[i], 0);
+    }
   }
 }
 
