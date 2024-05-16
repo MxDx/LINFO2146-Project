@@ -211,7 +211,6 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
 
   /* Extracting the first 2 bytes of the data */
   memcpy(&header.len_topic, input_data + LEN_HEADER + 1, sizeof(uint16_t));
-
   memcpy(&header.len_data, input_data + LEN_HEADER + 3, sizeof(uint16_t));
 
   LOG_INFO("Len topic: %u\n", header.len_topic);
@@ -291,13 +290,17 @@ void send_data_packet(uint8_t up, uint8_t multicast_group, uint16_t len_topic, u
 void forward_data_packet(const void *data, uint16_t len, parent_t* parent) {
   data_packet_t data_packet;
   process_data_packet(data, len, &data_packet);
+
+  uint8_t output[len]; 
+  memcpy(output, data, sizeof(linkaddr_t));
+  packing_data_packet(&data_packet, output + LEN_HEADER);
   free(data_packet.topic);
   free(data_packet.data);
 
   if (data_packet.header.up == 1) {
     /* Changing the dest value to the address of the parent */
-    ((linkaddr_t*)data)[1] = parent->parent_addr;
-    nullnet_buf = (uint8_t *)data;
+    memcpy(output + sizeof(linkaddr_t), &parent->parent_addr, sizeof(linkaddr_t));
+    nullnet_buf = output;
     nullnet_len = len;
 
     const linkaddr_t dest = parent->parent_addr;
@@ -307,16 +310,21 @@ void forward_data_packet(const void *data, uint16_t len, parent_t* parent) {
     NETSTACK_NETWORK.output(&dest);
     return;
   }
+
   /* Forwarding to all child of the multicast group */
+
   linkaddr_t nexthop;
   linkaddr_t sent_nexthop[children_count];
   int sent_count = 0;
   int start_index = get_multicast_children(data_packet.header.multicast_group, &nexthop, 0);
   while (start_index != -1) {
     /* Changing the dest value */
-    ((linkaddr_t*)data)[1] = nexthop;
-    nullnet_buf = (uint8_t *)data;
+    // ((linkaddr_t*)data)[1] = nexthop;
+    memcpy(output + sizeof(linkaddr_t), &nexthop, sizeof(linkaddr_t));
+    nullnet_buf = output;
     nullnet_len = len;
+
+    print_data_packet(&data_packet);
 
     LOG_INFO("Forwarding data packet to: ");
     LOG_INFO_LLADDR(&nexthop);
@@ -324,6 +332,7 @@ void forward_data_packet(const void *data, uint16_t len, parent_t* parent) {
     NETSTACK_NETWORK.output(&nexthop);
     sent_nexthop[sent_count] = nexthop;
     sent_count++;
+
     start_index = get_multicast_children(data_packet.header.multicast_group, &nexthop, start_index + 1);
     while (start_index != -1) {
       uint8_t found = 0;
@@ -414,20 +423,12 @@ void control_packet_send(uint8_t node_type, linkaddr_t* dest, uint8_t response_t
   control_packet.header = &header;
   control_packet.data = control_data;
 
-  LOG_INFO("Sending control packet\n");
-  LOG_INFO("Node type: %u\n", header.node_type);
-  LOG_INFO("Response type: %u\n", header.response_type);
-
   uint8_t data[8];
   packing_control_packet(&control_packet, data, len_of_data);
 
   uint8_t output[16];
   if (dest == NULL) {
     packing_packet(output, &linkaddr_node_addr, &null_addr, data, len_of_data + 1 + 2*sizeof(linkaddr_t));
-    LOG_INFO("Sending control packet to null\n");
-    LOG_INFO("Address: ");
-    LOG_INFO_LLADDR(&null_addr);
-    LOG_INFO_("\n");
   } else {
     packing_packet(output, &linkaddr_node_addr, dest, data, len_of_data + 1 + 2*sizeof(linkaddr_t));
   }
@@ -452,7 +453,7 @@ void control_packet_send(uint8_t node_type, linkaddr_t* dest, uint8_t response_t
 void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* parent, uint8_t multicast_group) {
   /* Create new possible parent */
   signed char rssi = cc2420_last_rssi;
-  LOG_INFO("type_parent: %u\n", type_parent);
+  LOG_INFO("Setup value: %u\n", setup);
 
   if (node_type == GATEWAY) {
     LOG_INFO("Ignoring gateway\n");

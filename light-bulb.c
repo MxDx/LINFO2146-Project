@@ -5,6 +5,7 @@
 #include <stdio.h> /* For printf() */
 #include <stdlib.h>
 #include "routing/custom-routing.h"
+#include "dev/leds.h"
 
 /* Log configuration */
 #include "sys/log.h"
@@ -45,19 +46,26 @@ void input_callback(const void *data, uint16_t len,
     return;
   }
 
+  uint8_t data_cpy[len];
+  memcpy(data_cpy, data, len);
 
   uint8_t packet_type;
   process_node_packet(data, len, &packet.src, &packet.dest, &packet_type, &parent, LIGHT_BULB_GROUP);
-  LOG_INFO("Received packet\n");
 
   if (packet_type == DATA) {
     data_packet_t data_packet;
-    process_data_packet(data, len, &data_packet);
+    process_data_packet(data_cpy, len, &data_packet);
     if (strcmp(data_packet.data, "on") == 0){
+      leds_on(LEDS_RED);
       LOG_INFO("Turning on light bulb\n");
     } else if (strcmp(data_packet.data, "off") == 0) {
+      leds_off(LEDS_RED);
       LOG_INFO("Turning off light bulb\n");
     }
+    
+    /* /!\ Freeing the topic and data */
+    free(data_packet.topic);
+    free(data_packet.data);
   }
 }
 
@@ -80,17 +88,13 @@ PROCESS_THREAD(node_process, ev, data)
   
   static struct etimer periodic_timer_setup;
 
-  etimer_set(&periodic_timer_setup, SEND_INTERVAL);
-  etimer_set(&periodic_timer, KEEP_ALIVE_INTERVAL);
   while(1) {
     while (not_setup()) {
-      etimer_reset(&periodic_timer_setup);
-      etimer_reset(&periodic_timer);
+      etimer_set(&periodic_timer_setup, SEND_INTERVAL);
       init_node();
       PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer_setup));
     }
-    etimer_reset(&periodic_timer);
-    etimer_reset(&periodic_timer_setup);
+    etimer_set(&periodic_timer, KEEP_ALIVE_INTERVAL);
   
     LOG_INFO("Running....\n");
     print_children();

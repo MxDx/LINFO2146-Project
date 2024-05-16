@@ -28,10 +28,22 @@ def main(ip, port):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((ip, port))
 
+    i = 0
+
     while True: 
         # sock.send(b"/1/lights/=on\n")
         data = recv(sock)
         process_gateway_data(data.decode("utf-8"))
+
+        time.sleep(3)
+        print("Sending on")
+        sock.send(b"/0/lights/=on\n")
+        
+        time.sleep(3)
+        print("Sending off")
+        sock.send(b"/0/lights/=off\n")
+
+        i += 1
 
         # time.sleep(1)
 
