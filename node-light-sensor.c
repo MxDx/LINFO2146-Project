@@ -52,7 +52,7 @@ void input_callback(const void *data, uint16_t len,
 
 
   uint8_t packet_type;
-  process_node_packet(data, len, &packet.src, &packet.dest, &packet_type, &parent);
+  process_node_packet(data, len, &packet.src, &packet.dest, &packet_type, &parent, UNICAST_GROUP);
   LOG_INFO("Received packet\n");
 }
 
@@ -96,7 +96,7 @@ PROCESS_THREAD(light_sensor_process, ev, data)
     sprintf(light_intensity_str, "%d", light_intensity);
     uint16_t len_data = strlen(light_intensity_str);
 
-    send_data_packet(len_topic, len_data, topic, light_intensity_str, &parent, NODE);    
+    send_data_packet(1, UNICAST_GROUP, len_topic, len_data, topic, light_intensity_str, &parent, NODE);    
     LOG_INFO("Packet sent\n");
 
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
