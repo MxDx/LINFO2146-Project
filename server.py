@@ -2,6 +2,8 @@ import socket
 import argparse
 import sys
 import time
+import paho.mqtt.client as mqtt
+
 
 def recv(sock):
     data = sock.recv(1)

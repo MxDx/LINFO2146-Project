@@ -56,7 +56,15 @@ void input_callback(const void *data, uint16_t len,
   process_gateway_packet(data + 2*sizeof(linkaddr_t), len, &packet.src, &packet.dest, &packet_type);
 
   if (packet_type == DATA) {
+    data_packet_t data_packet;
+    process_data_packet(data, len, &data_packet);
+    print_data_packet(&data_packet);
+    
     LOG_INFO("Received data packet\n");
+
+    /* /!\ freeing topic and data */
+    free(data_packet.topic);
+    free(data_packet.data);
   } 
 }
 
@@ -92,13 +100,13 @@ PROCESS_THREAD(gateway_process, ev, data)
     PROCESS_YIELD();
 
     if (ev == serial_line_event_message) {
-      char* message = (char*) data;
+      // char* message = (char*) data;
       // LOG_INFO("Received message: %s\n", message);
       /* Get the topic and the data to send "/barn_number/topic=data" */
       // get the first token
-      char* barn_number = strtok(message, "/=");
-      char* topic = strtok(NULL, "/=");
-      char* data = strtok(NULL, "/=");
+      // char* barn_number = strtok(message, "/=");
+      // char* topic = strtok(NULL, "/=");
+      // char* data = strtok(NULL, "/=");
 
     }
 
