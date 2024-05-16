@@ -16,10 +16,11 @@
 #define SUB_GATEWAY 0b01
 #define NODE 0b00
 
-#define SETUP 0b00
-#define RESPONSE 0b01
-#define SETUP_ACK 0b10
-#define DATA_ACK 0b11
+#define SETUP 0b000
+#define RESPONSE 0b001
+#define SETUP_ACK 0b010
+#define DATA_ACK 0b011
+#define CHILD_RM 0b100
 
 #define UNACK_TRESH 1
 

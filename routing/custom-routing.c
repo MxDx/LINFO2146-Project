@@ -261,7 +261,7 @@ void build_control_header(control_header_t* control_header, uint8_t node_type, u
 void packing_control_packet(control_packet_t* control_packet, uint8_t* data, uint16_t len_of_data) {
   data[0] = control_packet->header->type << 7;
   data[0] |= control_packet->header->node_type << 5;
-  data[0] |= control_packet->header->response_type << 3;
+  data[0] |= control_packet->header->response_type << 2;
 
   /* Adding the data */
   memcpy(data + 1, control_packet->data, len_of_data);
@@ -276,7 +276,7 @@ void process_control_header(const uint8_t *data, uint16_t len, control_header_t*
   uint8_t header = ((uint8_t *)data)[0];
   control_header->type = header >> 7;
   control_header->node_type = (header >> 5) & 0b11;
-  control_header->response_type = (header >> 3) & 0b11;
+  control_header->response_type = (header >> 2) & 0b11;
 }
 
 
