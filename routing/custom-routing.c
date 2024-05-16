@@ -225,8 +225,8 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
   }
 
   /* Extracting the topic and data */
-  char data_topic[sizeof(char)*header.len_topic + 1];
-  char data[sizeof(char)*header.len_data + 1];
+  char* data_topic = malloc(sizeof(char) * (header.len_topic + 1));
+  char* data = malloc(sizeof(char) * (header.len_data + 1));
   memcpy(data_topic, input_data + LEN_HEADER + LEN_DATA_HEADER + offset, header.len_topic);
   memcpy(data, input_data + LEN_HEADER + LEN_DATA_HEADER + offset + header.len_topic, header.len_data);
 
@@ -236,6 +236,7 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
   data_packet->header = header;
   data_packet->topic = data_topic;
   data_packet->data = data;
+
 }
 /*---------------------------------------------------------------------------*/
 
@@ -263,7 +264,7 @@ void send_data_packet(uint8_t up, uint8_t multicast_group, uint16_t len_topic, u
   packing_data_packet(&data_packet, data);
 
   uint8_t output[len_data_packet + LEN_HEADER];
-  packing_packet(output, &linkaddr_node_addr, &nexthop, data, len_data_packet + LEN_HEADER);
+  packing_packet(output, &linkaddr_node_addr, &nexthop, data, len_data_packet);
 
   nullnet_buf = output;
   nullnet_len = len_data_packet + LEN_HEADER;
@@ -272,9 +273,6 @@ void send_data_packet(uint8_t up, uint8_t multicast_group, uint16_t len_topic, u
   LOG_INFO_LLADDR(&nexthop);
   LOG_INFO_("\n");
   NETSTACK_NETWORK.output(&nexthop);
-
-  free(data_packet.topic);
-  free(data_packet.data);
 
   LOG_INFO("Data counter value at send: %u \n", data_counter);
   if (!ack) {
@@ -293,6 +291,8 @@ void send_data_packet(uint8_t up, uint8_t multicast_group, uint16_t len_topic, u
 void forward_data_packet(const void *data, uint16_t len, parent_t* parent) {
   data_packet_t data_packet;
   process_data_packet(data, len, &data_packet);
+  free(data_packet.topic);
+  free(data_packet.data);
 
   if (data_packet.header.up == 1) {
     /* Changing the dest value to the address of the parent */
@@ -763,6 +763,7 @@ void process_gateway_packet(const void *data, uint16_t len, linkaddr_t *src, lin
 void print_data_packet(data_packet_t* data_packet) {
   LOG_INFO("Data packet\n");
   LOG_INFO("Type: %u\n", data_packet->header.type);
+  LOG_INFO("Up: %u\n", data_packet->header.up);
   LOG_INFO("Length of topic: %u\n", data_packet->header.len_topic);
   LOG_INFO("Length of data: %u\n", data_packet->header.len_data);
   LOG_INFO("Topic: %s\n", data_packet->topic);

@@ -4,6 +4,8 @@
 #include <string.h>
 #include <stdio.h> /* For printf() */
 #include <stdlib.h>
+#include "dev/serial-line.h"
+#include "cpu/msp430/dev/uart0.h"
 
 #define IS_GATEWAY 1
 #include "routing/custom-routing.h"
@@ -56,8 +58,8 @@ void input_callback(const void *data, uint16_t len,
   process_gateway_packet(data + 2*sizeof(linkaddr_t), len, &packet.src, &packet.dest, &packet_type, barns, &barns_size);
 
   if (packet_type == DATA) {
-    data_packet_t * packet_data = malloc(sizeof(data_packet_t));
-    process_data_packet(data, len, packet_data);
+    data_packet_t packet_data;
+    process_data_packet(data, len, &packet_data);
     //if (!strcmp(packet_data.topic, "keepalive")){
       char *stringToReturn = malloc(sizeof(char) * 20);
       int barnNb;
@@ -67,15 +69,25 @@ void input_callback(const void *data, uint16_t len,
         }
       }
       barnNb--;
-      LOG_INFO("pute : %s\n", packet_data->topic);
-      sprintf(stringToReturn, "/%u/%s", barnNb, packet_data->topic);
+      LOG_INFO("pute : %s\n", packet_data.topic);
+      sprintf(stringToReturn, "/%u/%s", barnNb, packet_data.topic);
       LOG_INFO("received data from subject : %s\n", stringToReturn);
       free(stringToReturn);
-      free(packet_data);
+      /* /!\ freeing topic and data */
+      free(packet_data.topic);
+      free(packet_data.data);
     //}
     //sprintf(dest, string, value);
     LOG_INFO("Received data packet\n");
+
   } 
+}
+
+void striping_data(char* message, char* barn_number, char* topic, char* data) {
+  // get the first token
+  barn_number = strtok(message, "/=");
+  topic = strtok(NULL, "/=");
+  data = strtok(NULL, "/=");
 }
 
 /*---------------------------------------------------------------------------*/
@@ -90,6 +102,8 @@ PROCESS_THREAD(gateway_process, ev, data)
   type_parent = GATEWAY;
 
   PROCESS_BEGIN();
+  serial_line_init();
+  uart0_set_input(serial_line_input_byte);
 
   // RESPONSE FUNCTION
   nullnet_set_input_callback(input_callback);
@@ -98,19 +112,34 @@ PROCESS_THREAD(gateway_process, ev, data)
 
   etimer_set(&periodic_timer, SEND_INTERVAL);
   while(1) {
-    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
-    LOG_INFO("Running....\n");
-    print_children();
-    char* topic = "light";
-    uint16_t len_topic = strlen(topic);
-    char* data = "off";
-    uint16_t len_data = strlen(data);
+    PROCESS_YIELD();
 
-    linkaddr_t nexthop;
-    get_multicast_children(LIGHT_BULB_GROUP, &nexthop, 0);
+    if (ev == serial_line_event_message) {
+      // char* message = (char*) data;
+      // LOG_INFO("Received message: %s\n", message);
+      /* Get the topic and the data to send "/barn_number/topic=data" */
+      // get the first token
+      // char* barn_number = strtok(message, "/=");
+      // char* topic = strtok(NULL, "/=");
+      // char* data = strtok(NULL, "/=");
 
-    send_data_packet(0, LIGHT_BULB_GROUP, len_topic, len_data, topic, data, &nexthop, 0);
-    etimer_reset(&periodic_timer);
+    }
+
+    // if (etimer_expired(&periodic_timer)) {
+    //   LOG_INFO("Running....\n");
+    //   print_children();
+
+    //   char* topic = "light";
+    //   uint16_t len_topic = strlen(topic);
+    //   char* data = "off";
+    //   uint16_t len_data = strlen(data);
+
+    //   linkaddr_t nexthop;
+    //   get_multicast_children(LIGHT_BULB_GROUP, &nexthop, 0);
+
+    //   send_data_packet(0, LIGHT_BULB_GROUP, len_topic, len_data, topic, data, &nexthop, 0);
+    //   etimer_reset(&periodic_timer);
+    // }
   }
   LOG_INFO("Gateway process ended\n");
 
