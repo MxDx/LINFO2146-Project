@@ -161,7 +161,7 @@ void process_packet(const uint8_t* input_data, uint16_t len, packet_t* packet) {
 
 
 /*---------------------------------------------------------------------------*/
-void build_data_header(data_packet_t* data_packet, uint8_t up, uint8_t multicast_group, uint16_t len_topic, uint16_t len_data, char* topic, char* data, linkaddr_t* dest) {
+void build_data_header(data_packet_t* data_packet, uint8_t up, uint8_t multicast_group, uint16_t len_topic, uint16_t len_data, char* topic, char* data, linkaddr_t* dest, uint8_t mobile_flags) {
   data_header_t header;
   header.type = DATA;
   header.up = up;
@@ -169,6 +169,7 @@ void build_data_header(data_packet_t* data_packet, uint8_t up, uint8_t multicast
   header.len_topic = len_topic;
   header.len_data = len_data;
   header.dest = *dest;
+  header.mobile_flags = mobile_flags;
 
   data_packet->header = header;
   data_packet->topic = topic;
@@ -180,6 +181,7 @@ void packing_data_packet(data_packet_t* data_packet, uint8_t* data) {
   data[0] = data_packet->header.type << 7;
   data[0] |= data_packet->header.up << 6;
   data[0] |= data_packet->header.multicast_group << 2;
+  data[0] |= data_packet->header.mobile_flags;
 
   /* Setting the first 2 bytes to be the length of topic wihtout erasing the first bit */
   memcpy(data + 1, &data_packet->header.len_topic, sizeof(uint16_t));
@@ -208,6 +210,7 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
   header.type = input_data[LEN_HEADER] >> 7;
   header.up = (input_data[LEN_HEADER] >> 6) & 0x1;
   header.multicast_group = (input_data[LEN_HEADER] >> 2) & 0xF;
+  header.mobile_flags = input_data[LEN_HEADER] & 0x3;
 
   /* Extracting the first 2 bytes of the data */
   memcpy(&header.len_topic, input_data + LEN_HEADER + 1, sizeof(uint16_t));
@@ -216,6 +219,7 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
 
   LOG_INFO("Len topic: %u\n", header.len_topic);
   LOG_INFO("Len data: %u\n", header.len_data);
+  LOG_INFO("Mobile flags: %u\n", header.mobile_flags);
 
   uint8_t offset = 0;
   if (header.up == 0) {
@@ -245,12 +249,12 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
 
 
 /*---------------------------------------------------------------------------*/
-void send_data_packet(uint8_t up, uint8_t multicast_group, uint16_t len_topic, uint16_t len_data, char* topic, char* input_data, linkaddr_t* dest, uint8_t ack) {
+void send_data_packet(uint8_t up, uint8_t multicast_group, uint16_t len_topic, uint16_t len_data, char* topic, char* input_data, linkaddr_t* dest, uint8_t ack, uint8_t mobile_flags) {
   /* Setting the nexthop */
   linkaddr_t nexthop = *dest;
   
   data_packet_t data_packet;
-  build_data_header(&data_packet, up, multicast_group, len_topic, len_data, topic, input_data, dest);
+  build_data_header(&data_packet, up, multicast_group, len_topic, len_data, topic, input_data, dest, mobile_flags);
 
   uint8_t offset = 0;
   if (up == 0) {
@@ -346,7 +350,7 @@ void keep_alive(parent_t* parent, char* name) {
   LOG_INFO("Sending keep alive packet\n");
   uint16_t len_topic = strlen("keep_alive");
   uint16_t len_data = strlen(name);
-  send_data_packet(1, UNICAST_GROUP, len_topic, len_data, "keep_alive", name, &parent->parent_addr, 1);
+  send_data_packet(1, UNICAST_GROUP, len_topic, len_data, "keep_alive", name, &parent->parent_addr, 1, NOT_MOBILE);
 }
 /*---------------------------------------------------------------------------*/
 
@@ -672,7 +676,42 @@ void process_sub_gateway_packet(const uint8_t* data, uint16_t len, linkaddr_t *s
   }
 
   if (*packet_type == DATA) {
-    forward_data_packet(data, len, parent);
+    data_packet_t data_packet;
+    process_data_packet(data, len, &data_packet);
+    if (data_packet.header.mobile_flags == NOT_MOBILE){
+      forward_data_packet(data, len, parent);
+    }
+    if (data_packet.header.mobile_flags == DATA_QUERY){
+      LOG_INFO("Received data query\n");
+      uint64_t len_data_packet = data_packet.header.len_data + data_packet.header.len_topic + LEN_DATA_HEADER + sizeof(linkaddr_t);
+      uint8_t new_data[len_data_packet];
+
+      //modif data packet
+      data_packet.header.up = 0;
+      data_packet.header.multicast_group = data_packet.data[0];
+
+      packing_data_packet(&data_packet, new_data);
+      uint8_t output[len_data_packet + LEN_HEADER];
+      packing_packet(output, src, NULL, new_data, len_data_packet);
+      forward_data_packet(output, len_data_packet + LEN_HEADER, parent);
+      LOG_INFO("Data packet converted and sent to multicast group nb : %u\n", data_packet.data[0]);
+    }
+    if (data_packet.header.mobile_flags == DATA_RESPONSE){
+      LOG_INFO("Received data response\n");
+      uint64_t len_data_packet = data_packet.header.len_data + data_packet.header.len_topic + LEN_DATA_HEADER + sizeof(linkaddr_t);
+      uint8_t new_data[len_data_packet];
+
+      //modif data packet
+      data_packet.header.up = 0;
+
+      packing_data_packet(&data_packet, new_data);
+      uint8_t output[len_data_packet + LEN_HEADER];
+      packing_packet(output, src, NULL, new_data, len_data_packet);
+      forward_data_packet(output, len_data_packet + LEN_HEADER, parent);
+    }
+
+    free(data_packet.topic);
+    free(data_packet.data);
     return;
   }
 }
@@ -751,6 +790,89 @@ void process_gateway_packet(const void *data, uint16_t len, linkaddr_t *src, lin
     control_packet_send(GATEWAY, &nexthop, DATA_ACK, sizeof(linkaddr_t), src);
   }
 }
+
+
+void process_mobile_packet(const void *data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type, parent_t* parent) {
+  LOG_INFO("Processing mobile packet\n");
+  if (len == 0) {
+    LOG_INFO("Empty packet\n");
+    return;
+  }
+
+  const void* data_strip = data + sizeof(linkaddr_t) * 2;
+
+  uint8_t head = ((uint8_t *)data_strip)[0];
+  *packet_type = head >> 7;
+  LOG_INFO("Packet type: %u\n", *packet_type);
+
+  if (*packet_type == CONTROL) {
+    LOG_INFO("Received control packet\n");
+    control_header_t header;
+    process_control_header(data_strip, len, &header);
+    LOG_INFO("Node type: %u\n", header.node_type);
+    LOG_INFO("Response type: %u\n", header.response_type);
+
+
+    if (header.node_type == SUB_GATEWAY && header.response_type == RESPONSE) {
+      check_parent_node(src, header.node_type, parent, UNICAST_GROUP);
+      return;
+    }
+
+    if (header.response_type == CHILD_RM) {
+      LOG_INFO("Received child remove control packet\n");
+      return;
+    }
+
+    if (header.response_type == SETUP) {
+      LOG_INFO("Ignoring packet, mobile cannot act as relay to a gateway\n");
+      return;
+    }
+
+    if (header.response_type == RESPONSE) {
+      LOG_INFO("Received response control packet\n");
+      check_parent_node(src, header.node_type, parent, UNICAST_GROUP);
+      return;
+    }
+
+    if (header.response_type == SETUP_ACK) {
+      set_child(src, (uint8_t*)data_strip);
+      child_t new_child = children[children_count - 1];
+
+      /* Forwarding child to gateway */
+      send_child(new_child, NODE, parent);
+
+      LOG_INFO("Received setup ack control packet\n");
+      LOG_INFO("New children at address: ");
+      LOG_INFO_LLADDR(&new_child.addr);
+      LOG_INFO("\n");
+      LOG_INFO("From: ");
+      LOG_INFO_LLADDR(&new_child.from);
+      LOG_INFO("\n");
+      return;
+    }
+
+    if (header.response_type == DATA_ACK) {
+      process_data_ack(data_strip, src);
+      return;
+    }
+
+    return;
+  }
+
+  if (not_setup()) {
+    LOG_INFO("Ignoring data packet, node not setup\n");
+    return;
+  }
+
+  if (*packet_type == DATA) {
+    forward_data_packet(data, len, parent);
+    data_packet_t data_packet;
+    process_data_packet(data, len, &data_packet);
+    print_data_packet(&data_packet);
+    return;
+  }
+}
+
 /*---------------------------------------------------------------------------*/
 
 
@@ -767,6 +889,7 @@ void print_data_packet(data_packet_t* data_packet) {
   LOG_INFO("Length of topic: %u\n", data_packet->header.len_topic);
   LOG_INFO("Length of data: %u\n", data_packet->header.len_data);
   LOG_INFO("Topic: %s\n", data_packet->topic);
+  LOG_INFO("Mobile flags: %u\n", data_packet->header.mobile_flags);
   LOG_INFO("Data: %s\n", data_packet->data);
 }
 
