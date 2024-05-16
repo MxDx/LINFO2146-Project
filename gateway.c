@@ -34,7 +34,6 @@ static int barns_size = 0;
 void input_callback(const void *data, uint16_t len,
   const linkaddr_t *src, const linkaddr_t *dest)
 {
-  LOG_INFO("Received packet\n");
   packet_t packet;
   process_packet(data, len, &packet);
 
@@ -70,14 +69,13 @@ void input_callback(const void *data, uint16_t len,
       }
       barnNb--;
       sprintf(stringToReturn, "/%u/%s/=%s", barnNb, packet_data.topic, packet_data.data);
-      LOG_INFO("received data from subject : %s\n", stringToReturn);
+      printf("%s\n", stringToReturn);
       free(stringToReturn);
       /* /!\ freeing topic and data */
       free(packet_data.topic);
       free(packet_data.data);
     //}
     //sprintf(dest, string, value);
-    LOG_INFO("Received data packet\n");
 
   } 
 }

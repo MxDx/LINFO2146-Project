@@ -50,7 +50,6 @@ void input_callback(const void *data, uint16_t len,
     return;
   }
 
-
   uint8_t packet_type;
   process_node_packet(data, len, &packet.src, &packet.dest, &packet_type, &parent, UNICAST_GROUP);
   LOG_INFO("Received packet\n");

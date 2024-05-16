@@ -182,10 +182,8 @@ void packing_data_packet(data_packet_t* data_packet, uint8_t* data) {
   data[0] |= data_packet->header.multicast_group << 2;
 
   /* Setting the first 2 bytes to be the length of topic wihtout erasing the first bit */
-  data[1] |= data_packet->header.len_topic >> 8;
-  data[2] = data_packet->header.len_topic;
-  data[3] = data_packet->header.len_data >> 8;
-  data[4] = data_packet->header.len_data;
+  memcpy(data + 1, &data_packet->header.len_topic, sizeof(uint16_t));
+  memcpy(data + 3, &data_packet->header.len_data, sizeof(uint16_t));
 
   uint8_t offset = 0;
   if (data_packet->header.up == 0) {
@@ -212,11 +210,12 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
   header.multicast_group = (input_data[LEN_HEADER] >> 2) & 0xF;
 
   /* Extracting the first 2 bytes of the data */
-  header.len_topic = input_data[LEN_HEADER + 1] << 8;
-  header.len_topic |= input_data[LEN_HEADER + 2];
+  memcpy(&header.len_topic, input_data + LEN_HEADER + 1, sizeof(uint16_t));
 
-  header.len_data = input_data[LEN_HEADER + 3] << 8;
-  header.len_data |= input_data[LEN_HEADER + 4];
+  memcpy(&header.len_data, input_data + LEN_HEADER + 3, sizeof(uint16_t));
+
+  LOG_INFO("Len topic: %u\n", header.len_topic);
+  LOG_INFO("Len data: %u\n", header.len_data);
 
   uint8_t offset = 0;
   if (header.up == 0) {
@@ -227,6 +226,7 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
   /* Extracting the topic and data */
   char* data_topic = malloc(sizeof(char) * (header.len_topic + 1));
   char* data = malloc(sizeof(char) * (header.len_data + 1));
+
   memcpy(data_topic, input_data + LEN_HEADER + LEN_DATA_HEADER + offset, header.len_topic);
   memcpy(data, input_data + LEN_HEADER + LEN_DATA_HEADER + offset + header.len_topic, header.len_data);
 

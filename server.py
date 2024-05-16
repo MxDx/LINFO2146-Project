@@ -4,6 +4,17 @@ import sys
 import time
 import paho.mqtt.client as mqtt
 
+def process_gateway_data(data):
+    # /barn_number/topic/=payload\n
+    data = data.split("\n")
+    for i in range(len(data)):
+        if data[i][0] != "/":
+            continue
+        data[i] = data[i][1:]
+        barn_number, topic, payload = data[i].split("/")
+        payload = payload.split("=")[1]
+        print(f"Barn number: {barn_number}, Topic: {topic}, Payload: {payload}")
+
 
 def recv(sock):
     data = sock.recv(1)
@@ -17,11 +28,12 @@ def main(ip, port):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((ip, port))
 
-    for _ in range(20): 
-        sock.send(b"/1/lights/=on\n")
+    while True: 
+        # sock.send(b"/1/lights/=on\n")
         data = recv(sock)
-        print(data.decode("utf-8"))
-        time.sleep(1)
+        process_gateway_data(data.decode("utf-8"))
+
+        # time.sleep(1)
 
 
 if __name__ == "__main__":
