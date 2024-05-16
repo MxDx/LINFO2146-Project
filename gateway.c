@@ -55,10 +55,6 @@ void input_callback(const void *data, uint16_t len,
 
   if (packet_type == DATA) {
     LOG_INFO("Received data packet\n");
-    data_packet_t* data_packet = malloc(sizeof(data_packet_t));
-    process_data_packet((uint8_t*) data, len, data_packet);
-
-    print_data_packet(data_packet);
   } 
 }
 
@@ -85,6 +81,15 @@ PROCESS_THREAD(gateway_process, ev, data)
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
     LOG_INFO("Running....\n");
     print_children();
+    char* topic = "light";
+    uint16_t len_topic = strlen(topic);
+    char* data = "off";
+    uint16_t len_data = strlen(data);
+
+    linkaddr_t nexthop;
+    get_multicast_children(LIGHT_BULB_GROUP, &nexthop, 0);
+
+    send_data_packet(0, LIGHT_BULB_GROUP, len_topic, len_data, topic, data, &nexthop, 0);
     etimer_reset(&periodic_timer);
   }
   LOG_INFO("Gateway process ended\n");

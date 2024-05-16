@@ -14,6 +14,7 @@
 
 /* Configuration */
 #define SEND_INTERVAL (8 * CLOCK_SECOND)
+#define KEEP_ALIVE_INTERVAL (30 * CLOCK_SECOND)
 
 /*---------------------------------------------------------------------------*/
 PROCESS(node_process, "Node process");
@@ -48,6 +49,16 @@ void input_callback(const void *data, uint16_t len,
   uint8_t packet_type;
   process_node_packet(data, len, &packet.src, &packet.dest, &packet_type, &parent, LIGHT_BULB_GROUP);
   LOG_INFO("Received packet\n");
+
+  if (packet_type == DATA) {
+    data_packet_t data_packet;
+    process_data_packet(data, len, &data_packet);
+    if (strcmp(data_packet.data, "on") == 0){
+      LOG_INFO("Turning on light bulb\n");
+    } else if (strcmp(data_packet.data, "off") == 0) {
+      LOG_INFO("Turning off light bulb\n");
+    }
+  }
 }
 
 /*---------------------------------------------------------------------------*/
@@ -62,8 +73,6 @@ PROCESS_THREAD(node_process, ev, data)
   setup = 0;
   type_parent = NODE;
 
-  LOG_INFO("Setup value at start: %u\n", setup);
-
   PROCESS_BEGIN();
 
   // RESPONSE FUNCTION
@@ -72,7 +81,7 @@ PROCESS_THREAD(node_process, ev, data)
   static struct etimer periodic_timer_setup;
 
   etimer_set(&periodic_timer_setup, SEND_INTERVAL);
-  etimer_set(&periodic_timer, SEND_INTERVAL);
+  etimer_set(&periodic_timer, KEEP_ALIVE_INTERVAL);
   while(1) {
     while (not_setup()) {
       etimer_reset(&periodic_timer_setup);
@@ -85,7 +94,7 @@ PROCESS_THREAD(node_process, ev, data)
   
     LOG_INFO("Running....\n");
     print_children();
-    keep_alive(&parent, "sub_gateway", SUB_GATEWAY);
+    keep_alive(&parent, "light-bulb");
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
   }
   LOG_INFO("Node process ended\n");

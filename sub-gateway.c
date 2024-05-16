@@ -16,6 +16,7 @@
 
 /* Configuration */
 #define SEND_INTERVAL (8 * CLOCK_SECOND)
+#define KEEP_ALIVE_INTERVAL (30 * CLOCK_SECOND)
 
 /*---------------------------------------------------------------------------*/
 PROCESS(gateway_process, "Gateway process");
@@ -78,7 +79,7 @@ PROCESS_THREAD(gateway_process, ev, data)
   
   etimer_set(&periodic_timer_setup, SEND_INTERVAL);
 
-  etimer_set(&periodic_timer, SEND_INTERVAL);
+  etimer_set(&periodic_timer, KEEP_ALIVE_INTERVAL);
   while(1) {
     while (not_setup()) {
       etimer_reset(&periodic_timer_setup);
@@ -92,7 +93,7 @@ PROCESS_THREAD(gateway_process, ev, data)
     etimer_reset(&periodic_timer);
     LOG_INFO("Running....\n");
     print_children();
-    keep_alive(&parent, "sub_gateway", SUB_GATEWAY);
+    keep_alive(&parent, "sub_gateway");
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
   }
   LOG_INFO("Sub-gateway process ended\n");

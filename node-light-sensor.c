@@ -96,7 +96,7 @@ PROCESS_THREAD(light_sensor_process, ev, data)
     sprintf(light_intensity_str, "%d", light_intensity);
     uint16_t len_data = strlen(light_intensity_str);
 
-    send_data_packet(1, UNICAST_GROUP, len_topic, len_data, topic, light_intensity_str, &parent, NODE);    
+    send_data_packet(1, UNICAST_GROUP, len_topic, len_data, topic, light_intensity_str, &parent.parent_addr, 1);    
     LOG_INFO("Packet sent\n");
 
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));

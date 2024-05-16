@@ -27,13 +27,14 @@
 
 /* 
     Packet structure:
-    [ src ] [dest] [packet] 
+    [ src ] [ dest ] 
+    [packet] 
 
 */
 
 /* 
     Control packet structure:
-    [ src ] [dest] 
+    [ src ] [ dest ] 
     [type (1b)] [node_type (2b)] [response_type (3b)] [ empty (2b) ] 
     [data] 
 
@@ -41,10 +42,14 @@
 
 /* 
     Data packet structure:
-    [ src ] [dest] 
+    [ src ] [ dest ] 
     [type (1b)] [ up (1b) ] [ multicast group (4b) ] [ empty (2b) ]
     [len_topic (16b)] [len_data (16b)] 
+    [ dest (sizeof(linkaddr) or 0) ]
     [topic] [data] 
+
+    If up is 1, the packet is going up the tree
+    and the dest field is empty
 
 */
 
@@ -108,6 +113,7 @@ typedef struct {
     uint8_t multicast_group;
     uint16_t len_topic;
     uint16_t len_data;
+    linkaddr_t dest;
 } data_header_t;
 
 /* Structure for data packets
@@ -177,6 +183,15 @@ int get_children(const linkaddr_t* src, linkaddr_t* nexthop);
 void send_child(child_t child, uint8_t node_type, parent_t* parent);
 
 /**
+ * @brief Get the multicast children of a node
+ * 
+ * @param multicast_group multicast group
+ * @param nexthop next hop address
+ * @param start_index index to start the search
+ */
+int get_multicast_children(uint8_t multicast_group, linkaddr_t* nexthop, int start_index);
+
+/**
  * @brief Remove a child from the children list
  * 
  * @param addr source address
@@ -238,8 +253,9 @@ void process_packet(const uint8_t* input_data, uint16_t len, packet_t* packet);
  * @param len_data length of the data
  * @param topic topic of the data
  * @param data data of the packet
+ * @param dest destination address
  */
-void build_data_header(data_packet_t* data_packet, uint8_t up, uint8_t multicast_group, uint16_t len_topic, uint16_t len_data, char* topic, char* data);
+void build_data_header(data_packet_t* data_packet, uint8_t up, uint8_t multicast_group, uint16_t len_topic, uint16_t len_data, char* topic, char* data, linkaddr_t* dest);
 
 /**
  * @brief Process the data header of a packet
@@ -257,9 +273,10 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
  * @param len_data length of the data
  * @param topic topic of the data
  * @param data data of the packet
- * @param parent parent node
+ * @param dest destination address
+ * @param ack ack flag
  */
-void send_data_packet(uint8_t up, uint8_t multicast_group, uint16_t len_topic, uint16_t len_data, char* topic, char* data, parent_t* parent, uint8_t node_type);
+void send_data_packet(uint8_t up, uint8_t multicast_group, uint16_t len_topic, uint16_t len_data, char* topic, char* data, linkaddr_t* dest, uint8_t ack);
 
 /**
  * @brief Forward a data packet to the parent node
@@ -275,9 +292,8 @@ void forward_data_packet(const void *data, uint16_t len, parent_t* parent);
  * 
  * @param parent parent node
  * @param name name of the node
- * @param node_type type of the node
  */
-void keep_alive(parent_t* parent, char* name, uint8_t node_type);
+void keep_alive(parent_t* parent, char* name);
 
 /**
  * @brief Build the control header of a packet

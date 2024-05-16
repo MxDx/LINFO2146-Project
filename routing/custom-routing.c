@@ -67,6 +67,16 @@ int get_children(const linkaddr_t* src, linkaddr_t* nexthop) {
   return -1;
 }
 
+int get_multicast_children(uint8_t multicast_group, linkaddr_t* nexthop, int start_index) {
+  for (int i = start_index; i < children_count; i++) {
+    if (children[i].multicast_group == multicast_group) {
+      *nexthop = children[i].from;
+      return i;
+    }
+  }
+  return -1;
+}
+
 void send_child(child_t child, uint8_t node_type, parent_t* parent) {
   uint8_t data[sizeof(linkaddr_t) + 1];
   data[0] = child.multicast_group;
@@ -151,13 +161,14 @@ void process_packet(const uint8_t* input_data, uint16_t len, packet_t* packet) {
 
 
 /*---------------------------------------------------------------------------*/
-void build_data_header(data_packet_t* data_packet, uint8_t up, uint8_t multicast_group, uint16_t len_topic, uint16_t len_data, char* topic, char* data) {
+void build_data_header(data_packet_t* data_packet, uint8_t up, uint8_t multicast_group, uint16_t len_topic, uint16_t len_data, char* topic, char* data, linkaddr_t* dest) {
   data_header_t header;
   header.type = DATA;
   header.up = up;
   header.multicast_group = multicast_group;
   header.len_topic = len_topic;
   header.len_data = len_data;
+  header.dest = *dest;
 
   data_packet->header = header;
   data_packet->topic = topic;
@@ -176,9 +187,16 @@ void packing_data_packet(data_packet_t* data_packet, uint8_t* data) {
   data[3] = data_packet->header.len_data >> 8;
   data[4] = data_packet->header.len_data;
 
+  uint8_t offset = 0;
+  if (data_packet->header.up == 0) {
+    /* If going down we need to specify the dest addr */
+    memcpy(data + LEN_DATA_HEADER, &data_packet->header.dest, sizeof(linkaddr_t));
+    offset = sizeof(linkaddr_t);
+  }
+
   /* Setting the rest of the data to be the data_packet->topic and data_packet->data pointers */
-  memcpy(data + LEN_DATA_HEADER, data_packet->topic, data_packet->header.len_topic);
-  memcpy(data + LEN_DATA_HEADER + data_packet->header.len_topic, data_packet->data, data_packet->header.len_data);
+  memcpy(data + offset + LEN_DATA_HEADER, data_packet->topic, data_packet->header.len_topic);
+  memcpy(data + offset + LEN_DATA_HEADER + data_packet->header.len_topic, data_packet->data, data_packet->header.len_data);
 }
 
 void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t* data_packet) {
@@ -186,26 +204,31 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
     return;
   }
 
-  uint16_t start_of_data = sizeof(linkaddr_t)*2;
-
   data_header_t header;
 
   /* Extracting the first byte of the data */
-  header.type = input_data[start_of_data] >> 7;
-  header.up = (input_data[start_of_data] >> 6) & 0x1;
-  header.multicast_group = (input_data[start_of_data] >> 2) & 0xF;
+  header.type = input_data[LEN_HEADER] >> 7;
+  header.up = (input_data[LEN_HEADER] >> 6) & 0x1;
+  header.multicast_group = (input_data[LEN_HEADER] >> 2) & 0xF;
 
   /* Extracting the first 2 bytes of the data */
-  header.len_topic = input_data[start_of_data + 1] << 8;
-  header.len_topic |= input_data[start_of_data + 2];
-  header.len_data = input_data[start_of_data + 3] << 8;
-  header.len_data |= input_data[start_of_data + 4];
+  header.len_topic = input_data[LEN_HEADER + 1] << 8;
+  header.len_topic |= input_data[LEN_HEADER + 2];
+
+  header.len_data = input_data[LEN_HEADER + 3] << 8;
+  header.len_data |= input_data[LEN_HEADER + 4];
+
+  uint8_t offset = 0;
+  if (header.up == 0) {
+    header.dest = *((linkaddr_t*)(input_data + LEN_HEADER + LEN_DATA_HEADER));
+    offset = sizeof(linkaddr_t);
+  }
 
   /* Extracting the topic and data */
-  char* data_topic = malloc(sizeof(char)*header.len_topic + 1);
-  char* data = malloc(sizeof(char)*header.len_data + 1);
-  memcpy(data_topic, input_data + start_of_data + LEN_DATA_HEADER, header.len_topic);
-  memcpy(data, input_data + start_of_data + LEN_DATA_HEADER + header.len_topic, header.len_data);
+  char data_topic[sizeof(char)*header.len_topic + 1];
+  char data[sizeof(char)*header.len_data + 1];
+  memcpy(data_topic, input_data + LEN_HEADER + LEN_DATA_HEADER + offset, header.len_topic);
+  memcpy(data, input_data + LEN_HEADER + LEN_DATA_HEADER + offset + header.len_topic, header.len_data);
 
   data_topic[header.len_topic] = '\0';
   data[header.len_data] = '\0';
@@ -213,8 +236,6 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
   data_packet->header = header;
   data_packet->topic = data_topic;
   data_packet->data = data;
-
-  print_data_packet(data_packet);
 }
 /*---------------------------------------------------------------------------*/
 
@@ -223,31 +244,40 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
 
 
 /*---------------------------------------------------------------------------*/
-void send_data_packet(uint8_t up, uint8_t multicast_group, uint16_t len_topic, uint16_t len_data, char* topic, char* input_data, parent_t* parent, uint8_t node_type) {
-  data_packet_t data_packet;
-  build_data_header(&data_packet, up, multicast_group, len_topic, len_data, topic, input_data);
+void send_data_packet(uint8_t up, uint8_t multicast_group, uint16_t len_topic, uint16_t len_data, char* topic, char* input_data, linkaddr_t* dest, uint8_t ack) {
+  /* Setting the nexthop */
+  linkaddr_t nexthop = *dest;
   
-  print_data_packet(&data_packet);
+  data_packet_t data_packet;
+  build_data_header(&data_packet, up, multicast_group, len_topic, len_data, topic, input_data, dest);
 
-  uint8_t data[len_data + len_topic + LEN_DATA_HEADER];
+  uint8_t offset = 0;
+  if (up == 0) {
+    offset = sizeof(linkaddr_t);
+  }
+
+  uint64_t len_data_packet = len_data + len_topic + offset + LEN_DATA_HEADER;
+  uint8_t data[len_data_packet];
   packing_data_packet(&data_packet, data);
 
-  uint8_t output[len_data + len_topic + LEN_DATA_HEADER + LEN_HEADER];
-  packing_packet(output, &linkaddr_node_addr, &parent->parent_addr, data, len_topic + len_data + 4 + 2*sizeof(linkaddr_t));
+  uint8_t output[len_data_packet + LEN_HEADER];
+  packing_packet(output, &linkaddr_node_addr, &nexthop, data, len_data_packet + LEN_HEADER);
 
   nullnet_buf = output;
-  nullnet_len = LEN_HEADER + LEN_DATA_HEADER + len_topic + len_data;
+  nullnet_len = len_data_packet + LEN_HEADER;
 
-  const linkaddr_t dest = parent->parent_addr;
   LOG_INFO("Sending data packet to: ");
-  LOG_INFO_LLADDR(&dest);
+  LOG_INFO_LLADDR(&nexthop);
   LOG_INFO_("\n");
-  NETSTACK_NETWORK.output(&dest);
+  NETSTACK_NETWORK.output(&nexthop);
 
   free(data_packet.topic);
   free(data_packet.data);
 
   LOG_INFO("Data counter value at send: %u \n", data_counter);
+  if (!ack) {
+    return;
+  }
 
   data_counter++;
 
@@ -276,13 +306,45 @@ void forward_data_packet(const void *data, uint16_t len, parent_t* parent) {
     return;
   }
   /* Forwarding to all child of the multicast group */
+  linkaddr_t nexthop;
+  linkaddr_t sent_nexthop[children_count];
+  int sent_count = 0;
+  int start_index = get_multicast_children(data_packet.header.multicast_group, &nexthop, 0);
+  while (start_index != -1) {
+    /* Changing the dest value */
+    ((linkaddr_t*)data)[1] = nexthop;
+    nullnet_buf = (uint8_t *)data;
+    nullnet_len = len;
+
+    LOG_INFO("Forwarding data packet to: ");
+    LOG_INFO_LLADDR(&nexthop);
+    LOG_INFO_("\n");
+    NETSTACK_NETWORK.output(&nexthop);
+    sent_nexthop[sent_count] = nexthop;
+    sent_count++;
+    start_index = get_multicast_children(data_packet.header.multicast_group, &nexthop, start_index + 1);
+    while (start_index != -1) {
+      uint8_t found = 0;
+      for (int i = 0; i < sent_count; i++) {
+        if (linkaddr_cmp(&sent_nexthop[i], &nexthop)) {
+          found = 1;
+          break;
+        }
+      }
+      if (!found) {
+        break;
+      }
+      start_index = get_multicast_children(data_packet.header.multicast_group, &nexthop, start_index + 1);
+    }
+    LOG_INFO("Start index: %d\n", start_index);
+  }  
 }
 
-void keep_alive(parent_t* parent, char* name, uint8_t node_type) {
+void keep_alive(parent_t* parent, char* name) {
   LOG_INFO("Sending keep alive packet\n");
   uint16_t len_topic = strlen("keep_alive");
   uint16_t len_data = strlen(name);
-  send_data_packet(1, UNICAST_GROUP, len_topic, len_data, "keep_alive", name, parent, node_type);
+  send_data_packet(1, UNICAST_GROUP, len_topic, len_data, "keep_alive", name, &parent->parent_addr, 1);
 }
 /*---------------------------------------------------------------------------*/
 
@@ -667,7 +729,6 @@ void process_gateway_packet(const void *data, uint16_t len, linkaddr_t *src, lin
     }
 
     control_packet_send(GATEWAY, &nexthop, DATA_ACK, sizeof(linkaddr_t), src);
-
   }
 }
 /*---------------------------------------------------------------------------*/

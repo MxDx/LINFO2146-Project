@@ -14,6 +14,7 @@
 
 /* Configuration */
 #define SEND_INTERVAL (8 * CLOCK_SECOND)
+#define KEEP_ALIVE_INTERVAL (30 * CLOCK_SECOND)
 
 /*---------------------------------------------------------------------------*/
 PROCESS(node_process, "Node process");
@@ -62,8 +63,6 @@ PROCESS_THREAD(node_process, ev, data)
   setup = 0;
   type_parent = NODE;
 
-  LOG_INFO("Setup value at start: %u\n", setup);
-
   PROCESS_BEGIN();
 
   // RESPONSE FUNCTION
@@ -72,7 +71,7 @@ PROCESS_THREAD(node_process, ev, data)
   static struct etimer periodic_timer_setup;
 
   etimer_set(&periodic_timer_setup, SEND_INTERVAL);
-  etimer_set(&periodic_timer, SEND_INTERVAL);
+  etimer_set(&periodic_timer, KEEP_ALIVE_INTERVAL);
   while(1) {
     while (not_setup()) {
       etimer_reset(&periodic_timer_setup);
@@ -85,7 +84,7 @@ PROCESS_THREAD(node_process, ev, data)
   
     LOG_INFO("Running....\n");
     print_children();
-    keep_alive(&parent, "sub_gateway", SUB_GATEWAY);
+    keep_alive(&parent, "sub_gateway");
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
   }
   LOG_INFO("Node process ended\n");
