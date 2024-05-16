@@ -256,6 +256,8 @@ void send_data_packet(uint8_t up, uint8_t multicast_group, uint16_t len_topic, u
     offset = sizeof(linkaddr_t);
   }
 
+  print_data_packet(&data_packet);
+
   uint64_t len_data_packet = len_data + len_topic + offset + LEN_DATA_HEADER;
   uint8_t data[len_data_packet];
   packing_data_packet(&data_packet, data);
@@ -675,7 +677,7 @@ void process_sub_gateway_packet(const uint8_t* data, uint16_t len, linkaddr_t *s
   }
 }
 
-void process_gateway_packet(const void *data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type) {
+void process_gateway_packet(const void *data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type, linkaddr_t* barns, int* barns_size) {
   LOG_INFO("Processing gateway packet\n");
   if (len == 0) {
     LOG_INFO("Empty packet\n");
@@ -709,6 +711,24 @@ void process_gateway_packet(const void *data, uint16_t len, linkaddr_t *src, lin
       LOG_INFO_LLADDR(&new_child.from);
       LOG_INFO("\n");
       LOG_INFO("New child of multicast_group %u\n", new_child.multicast_group);
+      
+      // gestion of barns if the received address is a sub-gateway
+      if (linkaddr_cmp(&new_child.addr, &new_child.from)){
+        uint8_t found = 0;
+        for (int i = 0; i < *barns_size; i++) {
+          if (linkaddr_cmp(&barns[i], src)) {
+            found = i+1;
+            break;
+          }
+        }
+        if (found){
+          LOG_INFO("barn already exists, barn number = %u\n", found-1);
+        } else {
+          LOG_INFO("New barn added, barn number = %u\n", *barns_size);
+          *barns_size += 1;
+          barns[*barns_size - 1] = *src;
+        }
+      }
       return;
     }
 

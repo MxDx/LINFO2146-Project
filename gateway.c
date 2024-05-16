@@ -22,6 +22,8 @@ PROCESS(gateway_process, "Gateway process");
 AUTOSTART_PROCESSES(&gateway_process);
 
 parent_t* parent;
+static linkaddr_t barns[16];
+static int barns_size = 0;
 
 // static linkaddr_t parent_addr =         {{ 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }};
 
@@ -51,9 +53,27 @@ void input_callback(const void *data, uint16_t len,
 
 
   uint8_t packet_type;
-  process_gateway_packet(data + 2*sizeof(linkaddr_t), len, &packet.src, &packet.dest, &packet_type);
+  process_gateway_packet(data + 2*sizeof(linkaddr_t), len, &packet.src, &packet.dest, &packet_type, barns, &barns_size);
 
   if (packet_type == DATA) {
+    data_packet_t * packet_data = malloc(sizeof(data_packet_t));
+    process_data_packet(data, len, packet_data);
+    //if (!strcmp(packet_data.topic, "keepalive")){
+      char *stringToReturn = malloc(sizeof(char) * 20);
+      int barnNb;
+      for (barnNb = 0; barnNb < barns_size; barnNb++) {
+        if (linkaddr_cmp(&barns[barnNb], src)) {
+          break;
+        }
+      }
+      barnNb--;
+      LOG_INFO("pute : %s\n", packet_data->topic);
+      sprintf(stringToReturn, "/%u/%s", barnNb, packet_data->topic);
+      LOG_INFO("received data from subject : %s\n", stringToReturn);
+      free(stringToReturn);
+      free(packet_data);
+    //}
+    //sprintf(dest, string, value);
     LOG_INFO("Received data packet\n");
   } 
 }

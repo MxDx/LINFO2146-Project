@@ -393,7 +393,7 @@ void process_data_ack(const uint8_t* data, linkaddr_t* src);
  * @param dest destination address
  * @param packet_type packet type pointer to store the type of the packet
 */
-void process_gateway_packet(const void *data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type);
+void process_gateway_packet(const void *data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type, linkaddr_t* barns, int* barns_size);
 
 /*---------------------------------------------------------------------------*/
 /* Debug functions */
