@@ -9,25 +9,59 @@
 #include "dev/cc2420.h"
 #include "sys/log.h"
 
+/* TYPE */
 #define DATA 1
 #define CONTROL 0
 
+/* NODE TYPE */
 #define GATEWAY 0b10
 #define SUB_GATEWAY 0b01
 #define NODE 0b00
 
+/* RESPONSE TYPE */
 #define SETUP 0b000
 #define RESPONSE 0b001
 #define SETUP_ACK 0b010
 #define DATA_ACK 0b011
 #define CHILD_RM 0b100
 
+/* 
+    Packet structure:
+    [ src ] [dest] [packet] 
+
+*/
+
+/* 
+    Control packet structure:
+    [ src ] [dest] 
+    [type (1b)] [node_type (2b)] [response_type (3b)] [ empty (2b) ] 
+    [data] 
+
+*/
+
+/* 
+    Data packet structure:
+    [ src ] [dest] 
+    [type (1b)] [ up (1b) ] [ multicast group (4b) ] [ empty (2b) ]
+    [len_topic (16b)] [len_data (16b)] 
+    [topic] [data] 
+
+*/
+
+#define LEN_HEADER 2*sizeof(linkaddr_t)
+#define LEN_CONTROL_HEADER sizeof(uint8_t)
+#define LEN_DATA_HEADER sizeof(uint8_t) + 2*sizeof(uint16_t)
+
+#define UNICAST_GROUP 0b0000
+#define LIGHT_BULB_GROUP 0b0001
+#define IRRIGATION_GROUP 0b0010
+
 #define UNACK_TRESH 1
 
 typedef struct {
     linkaddr_t addr;
     linkaddr_t from;
-    uint8_t type;
+    uint8_t multicast_group;
 } child_t;
 
 /* Structure for parent nodes
@@ -70,6 +104,8 @@ typedef struct {
 */
 typedef struct {
     uint8_t type;
+    uint8_t up;
+    uint8_t multicast_group;
     uint16_t len_topic;
     uint16_t len_data;
 } data_header_t;
@@ -110,8 +146,10 @@ static linkaddr_t null_addr =         {{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0
  * @param rssi signal strength
  * @param type type of the parent node
  * @param parent parent node
+ * @param node_type type of the node
+ * @param multicast_group multicast group
  */
-void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, parent_t* parent, uint8_t node_type);
+void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, parent_t* parent, uint8_t node_type, uint8_t multicast_group);
 
 /**
  * @brief Set the child address
@@ -137,6 +175,13 @@ int get_children(const linkaddr_t* src, linkaddr_t* nexthop);
  * @param parent parent node
  */
 void send_child(child_t child, uint8_t node_type, parent_t* parent);
+
+/**
+ * @brief Remove a child from the children list
+ * 
+ * @param addr source address
+ */
+void rm_child(linkaddr_t* addr);
 
 /**
  * @brief Check if the node is not setup
@@ -187,12 +232,14 @@ void process_packet(const uint8_t* input_data, uint16_t len, packet_t* packet);
  * @brief Build the data header of a packet
  * 
  * @param data_packet data packet pointer to store the header
+ * @param up up flag
+ * @param multicast_group multicast group
  * @param len_topic length of the topic
  * @param len_data length of the data
  * @param topic topic of the data
  * @param data data of the packet
  */
-void build_data_header(data_packet_t* data_packet, uint16_t len_topic, uint16_t len_data, char* topic, char* data);
+void build_data_header(data_packet_t* data_packet, uint8_t up, uint8_t multicast_group, uint16_t len_topic, uint16_t len_data, char* topic, char* data);
 
 /**
  * @brief Process the data header of a packet
@@ -212,7 +259,7 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
  * @param data data of the packet
  * @param parent parent node
  */
-void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* data, parent_t* parent, uint8_t node_type);
+void send_data_packet(uint8_t up, uint8_t multicast_group, uint16_t len_topic, uint16_t len_data, char* topic, char* data, parent_t* parent, uint8_t node_type);
 
 /**
  * @brief Forward a data packet to the parent node
@@ -222,6 +269,15 @@ void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* 
  * @param parent parent node
  */
 void forward_data_packet(const void *data, uint16_t len, parent_t* parent);
+
+/**
+ * @brief Send a data packet to the parent node
+ * 
+ * @param parent parent node
+ * @param name name of the node
+ * @param node_type type of the node
+ */
+void keep_alive(parent_t* parent, char* name, uint8_t node_type);
 
 /**
  * @brief Build the control header of a packet
@@ -270,8 +326,19 @@ void control_packet_send(uint8_t node_type, linkaddr_t* dest, uint8_t response_t
  * @param parent_addr current parent node
  * @param setup setup flag
  * @param parent parent node
+ * @param multicast_group multicast group
  */
-void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* parent);
+void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* parent, uint8_t multicast_group);
+
+/**
+ * @brief Check if the parent node is better than the current one and update it,
+ *        only for the sub-gateways
+ * 
+ * @param src source address
+ * @param node_type type of the node
+ * @param parent parent node
+ */
+void check_parent_sub_gateway(const linkaddr_t* src, uint8_t node_type, parent_t* parent);
 
 /**
  * @brief Process a packet and determine its type, if it is a control
@@ -282,8 +349,9 @@ void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* paren
  * @param dest destination address
  * @param packet_type packet type pointer to store the type of the packet
  * @param parent parent node
+ * @param multicast_group multicast group
 */
-void process_node_packet(const void *data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type, parent_t* parent);
+void process_node_packet(const void *data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type, parent_t* parent, uint8_t multicast_group);
 
 /**
  * @brief Process a packet and determine its type, if it is a control

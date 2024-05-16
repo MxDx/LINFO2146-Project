@@ -9,8 +9,11 @@ static uint8_t children_count = 0;
 
 static uint8_t data_counter = 0;
 
+
+/* CHILDREN && PARENT HANDLING */
+
 /*---------------------------------------------------------------------------*/
-void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, parent_t* parent, uint8_t node_type) {
+void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, parent_t* parent, uint8_t node_type, uint8_t multicast_group) {
   linkaddr_copy(&parent->parent_addr, parent_addr);
   type_parent = type;
   parent->type = type;
@@ -24,9 +27,9 @@ void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, p
 
   // Sending setup ack to the parent
   LOG_INFO("Sending setup ack control packet\n");
-  LOG_INFO("Node type: %u\n", node_type);
   uint8_t data[sizeof(linkaddr_t) + 1];
-  data[0] = node_type;
+  data[0] = multicast_group;
+  LOG_INFO("Multicast group: %u\n", data[0]);
   memcpy(data + 1, &linkaddr_node_addr, sizeof(linkaddr_t));
   control_packet_send(node_type, &parent->parent_addr, SETUP_ACK, sizeof(linkaddr_t) + 1, data);
 }
@@ -35,14 +38,15 @@ void set_child(const linkaddr_t* src, uint8_t* data) {
   child_t new_child;
   new_child.addr = ((linkaddr_t*) (data + 2))[0];
   new_child.from = *src;
-  new_child.type = data[1];
+  new_child.multicast_group = data[1];
 
   linkaddr_t old_nexthop;
   int old_index = get_children(&new_child.addr, &old_nexthop);
 
   if (old_index != -1) {
-    if (!linkaddr_cmp(&old_nexthop, src)) {
-      LOG_INFO("TODO : send remove signal here\n");
+    /* Update if nexthop is different or nexthop is not the addr itself */
+    if (!linkaddr_cmp(&old_nexthop, src) && !linkaddr_cmp(&old_nexthop, &new_child.addr)) {
+      control_packet_send(0, &old_nexthop, CHILD_RM, sizeof(linkaddr_t), &new_child.addr);
     }
     children[old_index] = new_child;
     LOG_INFO("Updating child\n");
@@ -65,11 +69,29 @@ int get_children(const linkaddr_t* src, linkaddr_t* nexthop) {
 
 void send_child(child_t child, uint8_t node_type, parent_t* parent) {
   uint8_t data[sizeof(linkaddr_t) + 1];
-  data[0] = child.type;
+  data[0] = child.multicast_group;
   memcpy(data + 1, &child.addr, sizeof(linkaddr_t));
   control_packet_send(node_type, &parent->parent_addr, SETUP_ACK, sizeof(linkaddr_t) + 1, data);
 }
 
+void rm_child(linkaddr_t* addr) {
+  linkaddr_t nexthop;
+  int index = get_children(addr, &nexthop);
+  if (index != -1) {
+    children[index] = children[children_count - 1];
+    children_count--;
+  }
+  if (!linkaddr_cmp(&nexthop, addr)) {
+    control_packet_send(0, &nexthop, CHILD_RM, sizeof(linkaddr_t), addr);
+  }
+}
+/*---------------------------------------------------------------------------*/
+
+
+/* SETUP */
+
+
+/*---------------------------------------------------------------------------*/
 uint8_t not_setup() {
   return setup == 0;
 }
@@ -99,6 +121,10 @@ void init_gateway() {
 }
 /*---------------------------------------------------------------------------*/
 
+
+/* PACKET HANDLING */
+
+
 /*---------------------------------------------------------------------------*/
 void packing_packet(uint8_t* output, linkaddr_t* src, linkaddr_t* dest, uint8_t* packet, uint16_t len_packet) {
   /* Adding the src and dest at the beginning of the packet */
@@ -106,7 +132,7 @@ void packing_packet(uint8_t* output, linkaddr_t* src, linkaddr_t* dest, uint8_t*
   memcpy(output + sizeof(linkaddr_t), dest, sizeof(linkaddr_t));
 
   /* Adding the packet */
-  memcpy(output + 2*sizeof(linkaddr_t), packet, len_packet);
+  memcpy(output + LEN_HEADER, packet, len_packet);
 }
 
 void process_packet(const uint8_t* input_data, uint16_t len, packet_t* packet) {
@@ -121,13 +147,16 @@ void process_packet(const uint8_t* input_data, uint16_t len, packet_t* packet) {
 /*---------------------------------------------------------------------------*/
 
 
+/* DATA PACKET HANDLING */
+
+
 /*---------------------------------------------------------------------------*/
-void build_data_header(data_packet_t* data_packet, uint16_t len_topic, uint16_t len_data, char* topic, char* data) {
+void build_data_header(data_packet_t* data_packet, uint8_t up, uint8_t multicast_group, uint16_t len_topic, uint16_t len_data, char* topic, char* data) {
   data_header_t header;
   header.type = DATA;
-  LOG_INFO("Len topic: %u\n", len_topic);
-  header.len_topic = len_topic & 0x7FFF;
-  LOG_INFO("Len topic after: %u\n", header.len_topic);
+  header.up = up;
+  header.multicast_group = multicast_group;
+  header.len_topic = len_topic;
   header.len_data = len_data;
 
   data_packet->header = header;
@@ -138,16 +167,18 @@ void build_data_header(data_packet_t* data_packet, uint16_t len_topic, uint16_t 
 void packing_data_packet(data_packet_t* data_packet, uint8_t* data) {
   data[0] = 0;
   data[0] = data_packet->header.type << 7;
+  data[0] |= data_packet->header.up << 6;
+  data[0] |= data_packet->header.multicast_group << 2;
 
   /* Setting the first 2 bytes to be the length of topic wihtout erasing the first bit */
-  data[0] |= (data_packet->header.len_topic & 0x7F) >> 8;
-  data[1] = data_packet->header.len_topic;
-  data[2] = data_packet->header.len_data >> 8;
-  data[3] = data_packet->header.len_data;
+  data[1] |= data_packet->header.len_topic >> 8;
+  data[2] = data_packet->header.len_topic;
+  data[3] = data_packet->header.len_data >> 8;
+  data[4] = data_packet->header.len_data;
 
   /* Setting the rest of the data to be the data_packet->topic and data_packet->data pointers */
-  memcpy(data + 4, data_packet->topic, data_packet->header.len_topic);
-  memcpy(data + 4 + data_packet->header.len_topic, data_packet->data, data_packet->header.len_data);
+  memcpy(data + LEN_DATA_HEADER, data_packet->topic, data_packet->header.len_topic);
+  memcpy(data + LEN_DATA_HEADER + data_packet->header.len_topic, data_packet->data, data_packet->header.len_data);
 }
 
 void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t* data_packet) {
@@ -161,18 +192,20 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
 
   /* Extracting the first byte of the data */
   header.type = input_data[start_of_data] >> 7;
+  header.up = (input_data[start_of_data] >> 6) & 0x1;
+  header.multicast_group = (input_data[start_of_data] >> 2) & 0xF;
 
   /* Extracting the first 2 bytes of the data */
-  header.len_topic = (input_data[start_of_data] & 0x7F) << 8;
-  header.len_topic |= input_data[start_of_data + 1];
-  header.len_data = input_data[start_of_data + 2] << 8;
-  header.len_data |= input_data[start_of_data + 3];
+  header.len_topic = input_data[start_of_data + 1] << 8;
+  header.len_topic |= input_data[start_of_data + 2];
+  header.len_data = input_data[start_of_data + 3] << 8;
+  header.len_data |= input_data[start_of_data + 4];
 
   /* Extracting the topic and data */
   char* data_topic = malloc(sizeof(char)*header.len_topic + 1);
   char* data = malloc(sizeof(char)*header.len_data + 1);
-  memcpy(data_topic, input_data + start_of_data + 4, header.len_topic);
-  memcpy(data, input_data + start_of_data + 4 + header.len_topic, header.len_data);
+  memcpy(data_topic, input_data + start_of_data + LEN_DATA_HEADER, header.len_topic);
+  memcpy(data, input_data + start_of_data + LEN_DATA_HEADER + header.len_topic, header.len_data);
 
   data_topic[header.len_topic] = '\0';
   data[header.len_data] = '\0';
@@ -186,27 +219,24 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
 /*---------------------------------------------------------------------------*/
 
 
+/* DATA PACKET SENDING */
+
+
 /*---------------------------------------------------------------------------*/
-void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* input_data, parent_t* parent, uint8_t node_type) {
+void send_data_packet(uint8_t up, uint8_t multicast_group, uint16_t len_topic, uint16_t len_data, char* topic, char* input_data, parent_t* parent, uint8_t node_type) {
   data_packet_t data_packet;
-  build_data_header(&data_packet, len_topic, len_data, topic, input_data);
+  build_data_header(&data_packet, up, multicast_group, len_topic, len_data, topic, input_data);
   
-  LOG_INFO("Len topic: %u\n", data_packet.header.len_topic);
-  LOG_INFO("Sending data packet\n");
   print_data_packet(&data_packet);
 
-  // uint8_t* data = malloc(sizeof(uint8_t)*(len_topic + len_data + 4));
-  uint8_t data[8];
-  LOG_INFO("Before packing data packet\n");
+  uint8_t data[len_data + len_topic + LEN_DATA_HEADER];
   packing_data_packet(&data_packet, data);
 
-  // uint8_t* output = malloc(sizeof(uint8_t)*(len_topic + len_data + 4) + 2*sizeof(linkaddr_t));
-  uint8_t output[16];
-  LOG_INFO("Before packing\n");
+  uint8_t output[len_data + len_topic + LEN_DATA_HEADER + LEN_HEADER];
   packing_packet(output, &linkaddr_node_addr, &parent->parent_addr, data, len_topic + len_data + 4 + 2*sizeof(linkaddr_t));
 
   nullnet_buf = output;
-  nullnet_len = 2*sizeof(linkaddr_t) + 4 + len_topic + len_data;
+  nullnet_len = LEN_HEADER + LEN_DATA_HEADER + len_topic + len_data;
 
   const linkaddr_t dest = parent->parent_addr;
   LOG_INFO("Sending data packet to: ");
@@ -217,38 +247,47 @@ void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* 
   free(data_packet.topic);
   free(data_packet.data);
 
-  LOG_INFO("Data counter value at send: %u", data_counter);
+  LOG_INFO("Data counter value at send: %u \n", data_counter);
 
   data_counter++;
 
   if (data_counter > UNACK_TRESH) {
-    LOG_INFO("connection to parent lost");
+    LOG_INFO("Connection to parent lost \n");
     setup = 0;
     data_counter = 0;
   }
-
-  // free(data);
-  // free(output);
 }
 
 void forward_data_packet(const void *data, uint16_t len, parent_t* parent) {
-  uint8_t *d = (uint8_t *) data;
-  LOG_INFO("data[0] = %u\n", d[0]);
-  /* Changing the dest value to the address of the parent */
-  ((linkaddr_t*)data)[1] = parent->parent_addr;
-  linkaddr_t test = *((linkaddr_t*)data);
-  LOG_INFO_LLADDR(&test);
-  LOG_INFO("\n");
-  nullnet_buf = (uint8_t *)data;
-  nullnet_len = len;
+  data_packet_t data_packet;
+  process_data_packet(data, len, &data_packet);
 
-  const linkaddr_t dest = parent->parent_addr;
-  LOG_INFO("Forwarding data packet to: ");
-  LOG_INFO_LLADDR(&dest);
-  LOG_INFO_("\n");
-  NETSTACK_NETWORK.output(&dest);
+  if (data_packet.header.up == 1) {
+    /* Changing the dest value to the address of the parent */
+    ((linkaddr_t*)data)[1] = parent->parent_addr;
+    nullnet_buf = (uint8_t *)data;
+    nullnet_len = len;
+
+    const linkaddr_t dest = parent->parent_addr;
+    LOG_INFO("Forwarding data packet to: ");
+    LOG_INFO_LLADDR(&dest);
+    LOG_INFO_("\n");
+    NETSTACK_NETWORK.output(&dest);
+    return;
+  }
+  /* Forwarding to all child of the multicast group */
+}
+
+void keep_alive(parent_t* parent, char* name, uint8_t node_type) {
+  LOG_INFO("Sending keep alive packet\n");
+  uint16_t len_topic = strlen("keep_alive");
+  uint16_t len_data = strlen(name);
+  send_data_packet(1, UNICAST_GROUP, len_topic, len_data, "keep_alive", name, parent, node_type);
 }
 /*---------------------------------------------------------------------------*/
+
+
+/* CONTROL PACKET HANDLING */
 
 
 /*---------------------------------------------------------------------------*/
@@ -264,7 +303,7 @@ void packing_control_packet(control_packet_t* control_packet, uint8_t* data, uin
   data[0] |= control_packet->header->response_type << 2;
 
   /* Adding the data */
-  memcpy(data + 1, control_packet->data, len_of_data);
+  memcpy(data + LEN_CONTROL_HEADER, control_packet->data, len_of_data);
 }
 
 void process_control_header(const uint8_t *data, uint16_t len, control_header_t* control_header) {
@@ -276,9 +315,8 @@ void process_control_header(const uint8_t *data, uint16_t len, control_header_t*
   uint8_t header = ((uint8_t *)data)[0];
   control_header->type = header >> 7;
   control_header->node_type = (header >> 5) & 0b11;
-  control_header->response_type = (header >> 2) & 0b11;
+  control_header->response_type = (header >> 2) & 0b111;
 }
-
 
 void process_data_ack(const uint8_t* data, linkaddr_t* src){
   linkaddr_t dest =*((linkaddr_t*) (data+1));
@@ -299,6 +337,9 @@ void process_data_ack(const uint8_t* data, linkaddr_t* src){
 
 }
 /*---------------------------------------------------------------------------*/
+
+
+/* CONTROL PACKET SENDING */
 
 
 /*---------------------------------------------------------------------------*/
@@ -336,13 +377,15 @@ void control_packet_send(uint8_t node_type, linkaddr_t* dest, uint8_t response_t
   LOG_INFO_("\n");
 
   NETSTACK_NETWORK.output(dest);
-
-  /* Freeing everything */
-  // free(data);
-  // free(output);
 }
+/*---------------------------------------------------------------------------*/
 
-void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* parent) {
+
+/* PARENT DECISIONNING */
+
+
+/*---------------------------------------------------------------------------*/
+void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* parent, uint8_t multicast_group) {
   /* Create new possible parent */
   signed char rssi = cc2420_last_rssi;
   LOG_INFO("type_parent: %u\n", type_parent);
@@ -354,14 +397,14 @@ void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* paren
 
   if (not_setup()) {
     setup = 1;
-    set_parent(src, node_type, rssi, parent, NODE);
+    set_parent(src, node_type, rssi, parent, NODE, multicast_group);
     LOG_INFO("First parent setup\n");
     return;
   }
 
   /* If the new parent is better than the current one */
   if (parent->type < node_type) {
-    set_parent(src, node_type, rssi, parent, NODE);
+    set_parent(src, node_type, rssi, parent, NODE, multicast_group);
     LOG_INFO("Better parent found\n");
     return;
   }
@@ -372,7 +415,7 @@ void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* paren
       parent->rssi < rssi
       ) 
   {
-    set_parent(src, node_type, rssi, parent, NODE);
+    set_parent(src, node_type, rssi, parent, NODE, multicast_group);
     LOG_INFO("Better parent found\n");
     return;
   }
@@ -391,7 +434,7 @@ void check_parent_sub_gateway(const linkaddr_t* src, uint8_t node_type, parent_t
 
   if (not_setup()) {
     setup = 1;
-    set_parent(src, node_type, rssi, parent, SUB_GATEWAY);
+    set_parent(src, node_type, rssi, parent, SUB_GATEWAY, UNICAST_GROUP);
     LOG_INFO("First parent setup\n");
     return;
   }
@@ -399,7 +442,7 @@ void check_parent_sub_gateway(const linkaddr_t* src, uint8_t node_type, parent_t
   /* If the new parent is the same as the current one */
   if (parent->rssi < rssi) 
   {
-    set_parent(src, node_type, rssi, parent, SUB_GATEWAY);
+    set_parent(src, node_type, rssi, parent, SUB_GATEWAY, UNICAST_GROUP);
     LOG_INFO("Better parent found\n");
     return;
   }
@@ -407,8 +450,11 @@ void check_parent_sub_gateway(const linkaddr_t* src, uint8_t node_type, parent_t
 /*---------------------------------------------------------------------------*/
 
 
+/* PACKET PROCESSING */
+
+
 /*---------------------------------------------------------------------------*/
-void process_node_packet(const void *data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type, parent_t* parent) {
+void process_node_packet(const void *data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type, parent_t* parent, uint8_t multicast_group) {
   if (len == 0) {
     LOG_INFO("Empty packet\n");
     return;
@@ -429,7 +475,13 @@ void process_node_packet(const void *data, uint16_t len, linkaddr_t *src, linkad
 
 
     if (header.node_type == SUB_GATEWAY && header.response_type == RESPONSE) {
-      check_parent_node(src, header.node_type, parent);
+      check_parent_node(src, header.node_type, parent, multicast_group);
+      return;
+    }
+
+    if (header.response_type == CHILD_RM) {
+      LOG_INFO("Received child remove control packet\n");
+      rm_child((linkaddr_t*)(data_strip + 1));
       return;
     }
 
@@ -449,7 +501,7 @@ void process_node_packet(const void *data, uint16_t len, linkaddr_t *src, linkad
 
     if (header.response_type == RESPONSE) {
       LOG_INFO("Received response control packet\n");
-      check_parent_node(src, header.node_type, parent);
+      check_parent_node(src, header.node_type, parent, multicast_group);
       return;
     }
 
@@ -528,6 +580,12 @@ void process_sub_gateway_packet(const uint8_t* data, uint16_t len, linkaddr_t *s
       return;
     }
 
+    if (header.response_type == CHILD_RM) {
+      LOG_INFO("Received child remove control packet\n");
+      rm_child((linkaddr_t*)(data_strip + 1));
+      return;
+    }
+
     if (header.response_type == DATA_ACK) {
       process_data_ack(data_strip, src);
       return;
@@ -588,7 +646,7 @@ void process_gateway_packet(const void *data, uint16_t len, linkaddr_t *src, lin
       LOG_INFO("From: ");
       LOG_INFO_LLADDR(&new_child.from);
       LOG_INFO("\n");
-      LOG_INFO("New child type %u\n", new_child.type);
+      LOG_INFO("New child of multicast_group %u\n", new_child.multicast_group);
       return;
     }
 
@@ -615,6 +673,8 @@ void process_gateway_packet(const void *data, uint16_t len, linkaddr_t *src, lin
 /*---------------------------------------------------------------------------*/
 
 
+
+/* PRINTING */
 
 
 
@@ -646,6 +706,6 @@ void print_children() {
     LOG_INFO("From: ");
     LOG_INFO_LLADDR(&children[i].from);
     LOG_INFO("\n");
-    LOG_INFO("Type: %u\n", children[i].type);
+    LOG_INFO("Multicast group: %u\n", children[i].multicast_group);
   }
 }
