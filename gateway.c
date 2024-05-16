@@ -64,11 +64,10 @@ void input_callback(const void *data, uint16_t len,
       char *stringToReturn = malloc(sizeof(char) * 20);
       int barnNb;
       for (barnNb = 0; barnNb < barns_size; barnNb++) {
-        if (linkaddr_cmp(&barns[barnNb], src)) {
+        if (linkaddr_cmp(&barns[barnNb], dest)) {
           break;
         }
       }
-      barnNb--;
       sprintf(stringToReturn, "/%u/%s/=%s", barnNb, packet_data.topic, packet_data.data);
       LOG_INFO("received data from subject : %s\n", stringToReturn);
       free(stringToReturn);
