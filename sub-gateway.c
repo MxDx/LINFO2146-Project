@@ -77,19 +77,23 @@ PROCESS_THREAD(gateway_process, ev, data)
   nullnet_set_input_callback(input_callback);
   
   etimer_set(&periodic_timer_setup, SEND_INTERVAL);
-  while (not_setup()) {
-    etimer_reset(&periodic_timer_setup);
-    LOG_INFO("Setup value: %u\n", setup);
-    init_sub_gateway();
-    LOG_INFO("Waiting for setup\n");
-    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer_setup));
-  }
 
   etimer_set(&periodic_timer, SEND_INTERVAL);
   while(1) {
-    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
-    LOG_INFO("Running....\n");
+    while (not_setup()) {
+      etimer_reset(&periodic_timer_setup);
+      etimer_reset(&periodic_timer);
+      LOG_INFO("Setup value: %u\n", setup);
+      init_sub_gateway();
+      LOG_INFO("Waiting for setup\n");
+      PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer_setup));
+    }
+    etimer_reset(&periodic_timer_setup);
     etimer_reset(&periodic_timer);
+    LOG_INFO("Running....\n");
+    print_children();
+    keep_alive(&parent, "sub_gateway", SUB_GATEWAY);
+    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
   }
   LOG_INFO("Sub-gateway process ended\n");
 

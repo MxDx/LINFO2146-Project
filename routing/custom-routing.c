@@ -9,6 +9,9 @@ static uint8_t children_count = 0;
 
 static uint8_t data_counter = 0;
 
+
+/* CHILDREN && PARENT HANDLING */
+
 /*---------------------------------------------------------------------------*/
 void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, parent_t* parent, uint8_t node_type) {
   linkaddr_copy(&parent->parent_addr, parent_addr);
@@ -41,8 +44,10 @@ void set_child(const linkaddr_t* src, uint8_t* data) {
   int old_index = get_children(&new_child.addr, &old_nexthop);
 
   if (old_index != -1) {
-    if (!linkaddr_cmp(&old_nexthop, src)) {
+    /* Update if nexthop is different or nexthop is not the addr itself */
+    if (!linkaddr_cmp(&old_nexthop, src) && !linkaddr_cmp(&old_nexthop, &new_child.addr)) {
       LOG_INFO("TODO : send remove signal here\n");
+      control_packet_send(0, &old_nexthop, CHILD_RM, sizeof(linkaddr_t), &new_child.addr);
     }
     children[old_index] = new_child;
     LOG_INFO("Updating child\n");
@@ -70,6 +75,24 @@ void send_child(child_t child, uint8_t node_type, parent_t* parent) {
   control_packet_send(node_type, &parent->parent_addr, SETUP_ACK, sizeof(linkaddr_t) + 1, data);
 }
 
+void rm_child(linkaddr_t* addr) {
+  linkaddr_t nexthop;
+  int index = get_children(addr, &nexthop);
+  if (index != -1) {
+    children[index] = children[children_count - 1];
+    children_count--;
+  }
+  if (!linkaddr_cmp(&nexthop, addr)) {
+    control_packet_send(0, &nexthop, CHILD_RM, sizeof(linkaddr_t), addr);
+  }
+}
+/*---------------------------------------------------------------------------*/
+
+
+/* SETUP */
+
+
+/*---------------------------------------------------------------------------*/
 uint8_t not_setup() {
   return setup == 0;
 }
@@ -99,6 +122,10 @@ void init_gateway() {
 }
 /*---------------------------------------------------------------------------*/
 
+
+/* PACKET HANDLING */
+
+
 /*---------------------------------------------------------------------------*/
 void packing_packet(uint8_t* output, linkaddr_t* src, linkaddr_t* dest, uint8_t* packet, uint16_t len_packet) {
   /* Adding the src and dest at the beginning of the packet */
@@ -121,13 +148,14 @@ void process_packet(const uint8_t* input_data, uint16_t len, packet_t* packet) {
 /*---------------------------------------------------------------------------*/
 
 
+/* DATA PACKET HANDLING */
+
+
 /*---------------------------------------------------------------------------*/
 void build_data_header(data_packet_t* data_packet, uint16_t len_topic, uint16_t len_data, char* topic, char* data) {
   data_header_t header;
   header.type = DATA;
-  LOG_INFO("Len topic: %u\n", len_topic);
   header.len_topic = len_topic & 0x7FFF;
-  LOG_INFO("Len topic after: %u\n", header.len_topic);
   header.len_data = len_data;
 
   data_packet->header = header;
@@ -186,23 +214,20 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
 /*---------------------------------------------------------------------------*/
 
 
+/* DATA PACKET SENDING */
+
+
 /*---------------------------------------------------------------------------*/
 void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* input_data, parent_t* parent, uint8_t node_type) {
   data_packet_t data_packet;
   build_data_header(&data_packet, len_topic, len_data, topic, input_data);
   
-  LOG_INFO("Len topic: %u\n", data_packet.header.len_topic);
-  LOG_INFO("Sending data packet\n");
   print_data_packet(&data_packet);
 
-  // uint8_t* data = malloc(sizeof(uint8_t)*(len_topic + len_data + 4));
-  uint8_t data[8];
-  LOG_INFO("Before packing data packet\n");
+  uint8_t data[len_data + len_topic + 4];
   packing_data_packet(&data_packet, data);
 
-  // uint8_t* output = malloc(sizeof(uint8_t)*(len_topic + len_data + 4) + 2*sizeof(linkaddr_t));
-  uint8_t output[16];
-  LOG_INFO("Before packing\n");
+  uint8_t output[len_data + len_topic + 4 + 2*sizeof(linkaddr_t)];
   packing_packet(output, &linkaddr_node_addr, &parent->parent_addr, data, len_topic + len_data + 4 + 2*sizeof(linkaddr_t));
 
   nullnet_buf = output;
@@ -217,18 +242,15 @@ void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* 
   free(data_packet.topic);
   free(data_packet.data);
 
-  LOG_INFO("Data counter value at send: %u", data_counter);
+  LOG_INFO("Data counter value at send: %u \n", data_counter);
 
   data_counter++;
 
   if (data_counter > UNACK_TRESH) {
-    LOG_INFO("connection to parent lost");
+    LOG_INFO("Connection to parent lost \n");
     setup = 0;
     data_counter = 0;
   }
-
-  // free(data);
-  // free(output);
 }
 
 void forward_data_packet(const void *data, uint16_t len, parent_t* parent) {
@@ -248,7 +270,17 @@ void forward_data_packet(const void *data, uint16_t len, parent_t* parent) {
   LOG_INFO_("\n");
   NETSTACK_NETWORK.output(&dest);
 }
+
+void keep_alive(parent_t* parent, char* name, uint8_t node_type) {
+  LOG_INFO("Sending keep alive packet\n");
+  uint16_t len_topic = strlen("keep_alive");
+  uint16_t len_data = strlen(name);
+  send_data_packet(len_topic, len_data, "keep_alive", name, parent, node_type);
+}
 /*---------------------------------------------------------------------------*/
+
+
+/* CONTROL PACKET HANDLING */
 
 
 /*---------------------------------------------------------------------------*/
@@ -261,7 +293,7 @@ void build_control_header(control_header_t* control_header, uint8_t node_type, u
 void packing_control_packet(control_packet_t* control_packet, uint8_t* data, uint16_t len_of_data) {
   data[0] = control_packet->header->type << 7;
   data[0] |= control_packet->header->node_type << 5;
-  data[0] |= control_packet->header->response_type << 3;
+  data[0] |= control_packet->header->response_type << 2;
 
   /* Adding the data */
   memcpy(data + 1, control_packet->data, len_of_data);
@@ -276,9 +308,8 @@ void process_control_header(const uint8_t *data, uint16_t len, control_header_t*
   uint8_t header = ((uint8_t *)data)[0];
   control_header->type = header >> 7;
   control_header->node_type = (header >> 5) & 0b11;
-  control_header->response_type = (header >> 3) & 0b11;
+  control_header->response_type = (header >> 2) & 0b111;
 }
-
 
 void process_data_ack(const uint8_t* data, linkaddr_t* src){
   linkaddr_t dest =*((linkaddr_t*) (data+1));
@@ -299,6 +330,9 @@ void process_data_ack(const uint8_t* data, linkaddr_t* src){
 
 }
 /*---------------------------------------------------------------------------*/
+
+
+/* CONTROL PACKET SENDING */
 
 
 /*---------------------------------------------------------------------------*/
@@ -336,12 +370,14 @@ void control_packet_send(uint8_t node_type, linkaddr_t* dest, uint8_t response_t
   LOG_INFO_("\n");
 
   NETSTACK_NETWORK.output(dest);
-
-  /* Freeing everything */
-  // free(data);
-  // free(output);
 }
+/*---------------------------------------------------------------------------*/
 
+
+/* PARENT DECISIONNING */
+
+
+/*---------------------------------------------------------------------------*/
 void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* parent) {
   /* Create new possible parent */
   signed char rssi = cc2420_last_rssi;
@@ -407,6 +443,9 @@ void check_parent_sub_gateway(const linkaddr_t* src, uint8_t node_type, parent_t
 /*---------------------------------------------------------------------------*/
 
 
+/* PACKET PROCESSING */
+
+
 /*---------------------------------------------------------------------------*/
 void process_node_packet(const void *data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type, parent_t* parent) {
   if (len == 0) {
@@ -430,6 +469,12 @@ void process_node_packet(const void *data, uint16_t len, linkaddr_t *src, linkad
 
     if (header.node_type == SUB_GATEWAY && header.response_type == RESPONSE) {
       check_parent_node(src, header.node_type, parent);
+      return;
+    }
+
+    if (header.response_type == CHILD_RM) {
+      LOG_INFO("Received child remove control packet\n");
+      rm_child((linkaddr_t*)(data_strip + 1));
       return;
     }
 
@@ -528,6 +573,12 @@ void process_sub_gateway_packet(const uint8_t* data, uint16_t len, linkaddr_t *s
       return;
     }
 
+    if (header.response_type == CHILD_RM) {
+      LOG_INFO("Received child remove control packet\n");
+      rm_child((linkaddr_t*)(data_strip + 1));
+      return;
+    }
+
     if (header.response_type == DATA_ACK) {
       process_data_ack(data_strip, src);
       return;
@@ -615,6 +666,8 @@ void process_gateway_packet(const void *data, uint16_t len, linkaddr_t *src, lin
 /*---------------------------------------------------------------------------*/
 
 
+
+/* PRINTING */
 
 
 

@@ -16,10 +16,11 @@
 #define SUB_GATEWAY 0b01
 #define NODE 0b00
 
-#define SETUP 0b00
-#define RESPONSE 0b01
-#define SETUP_ACK 0b10
-#define DATA_ACK 0b11
+#define SETUP 0b000
+#define RESPONSE 0b001
+#define SETUP_ACK 0b010
+#define DATA_ACK 0b011
+#define CHILD_RM 0b100
 
 #define UNACK_TRESH 1
 
@@ -138,6 +139,13 @@ int get_children(const linkaddr_t* src, linkaddr_t* nexthop);
 void send_child(child_t child, uint8_t node_type, parent_t* parent);
 
 /**
+ * @brief Remove a child from the children list
+ * 
+ * @param addr source address
+ */
+void rm_child(linkaddr_t* addr);
+
+/**
  * @brief Check if the node is not setup
  * 
  * @return uint8_t 1 if the node is not setup, 0 otherwise
@@ -221,6 +229,15 @@ void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* 
  * @param parent parent node
  */
 void forward_data_packet(const void *data, uint16_t len, parent_t* parent);
+
+/**
+ * @brief Send a data packet to the parent node
+ * 
+ * @param parent parent node
+ * @param name name of the node
+ * @param node_type type of the node
+ */
+void keep_alive(parent_t* parent, char* name, uint8_t node_type);
 
 /**
  * @brief Build the control header of a packet
