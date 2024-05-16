@@ -59,7 +59,6 @@ void input_callback(const void *data, uint16_t len,
   if (packet_type == DATA) {
     data_packet_t packet_data;
     process_data_packet(data, len, &packet_data);
-    //if (!strcmp(packet_data.topic, "keepalive")){
       char *stringToReturn = malloc(sizeof(char) * 20);
       int barnNb;
       for (barnNb = 0; barnNb < barns_size; barnNb++) {
@@ -70,12 +69,10 @@ void input_callback(const void *data, uint16_t len,
       sprintf(stringToReturn, "/%u/%s/=%s", barnNb, packet_data.topic, packet_data.data);
       printf("%s\n", stringToReturn);
       free(stringToReturn);
+
       /* /!\ freeing topic and data */
       free(packet_data.topic);
       free(packet_data.data);
-    //}
-    //sprintf(dest, string, value);
-
   } 
 }
 
@@ -84,6 +81,12 @@ void striping_data(char* message, char* barn_number, char* topic, char* data) {
   barn_number = strtok(message, "/=");
   topic = strtok(NULL, "/=");
   data = strtok(NULL, "/=");
+}
+
+void decide_action(char* topic, char* data, uint8_t barn_number) {
+  if (strcmp(topic, "lights") == 0) {
+    send_data_packet(0, LIGHT_BULB_GROUP, strlen(topic), strlen(data), topic, data, &barns[barn_number], 0);
+  }
 }
 
 /*---------------------------------------------------------------------------*/
@@ -111,14 +114,16 @@ PROCESS_THREAD(gateway_process, ev, data)
     PROCESS_YIELD();
 
     if (ev == serial_line_event_message) {
-      // char* message = (char*) data;
+      char* message = (char*) data;
       // LOG_INFO("Received message: %s\n", message);
       /* Get the topic and the data to send "/barn_number/topic=data" */
-      // get the first token
-      // char* barn_number = strtok(message, "/=");
-      // char* topic = strtok(NULL, "/=");
-      // char* data = strtok(NULL, "/=");
+      char* barn_number = strtok(message, "/=");
+      char* topic = strtok(NULL, "/=");
+      char* data = strtok(NULL, "/=");
 
+      uint8_t barn_number_int = atoi(barn_number);
+
+      decide_action(topic, data, barn_number_int);
     }
 
     // if (etimer_expired(&periodic_timer)) {
