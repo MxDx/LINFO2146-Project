@@ -17,6 +17,7 @@
 #define GATEWAY 0b10
 #define SUB_GATEWAY 0b01
 #define NODE 0b00
+#define PHONE 0b11
 
 /* RESPONSE TYPE */
 #define SETUP 0b000
@@ -24,6 +25,11 @@
 #define SETUP_ACK 0b010
 #define DATA_ACK 0b011
 #define CHILD_RM 0b100
+
+/* Mobile flags*/
+#define NOT_MOBILE 0b00
+#define DATA_QUERY 0b01
+#define DATA_RESPONSE 0b10
 
 /* 
     Packet structure:
@@ -60,6 +66,7 @@
 #define UNICAST_GROUP 0b0000
 #define LIGHT_BULB_GROUP 0b0001
 #define IRRIGATION_GROUP 0b0010
+#define LIGHT_SENSOR_GROUP 0b0011
 
 #define UNACK_TRESH 2
 
@@ -113,6 +120,7 @@ typedef struct {
     uint8_t multicast_group;
     uint16_t len_topic;
     uint16_t len_data;
+    uint8_t mobile_flags;
     linkaddr_t dest;
 } data_header_t;
 
@@ -254,8 +262,17 @@ void process_packet(const uint8_t* input_data, uint16_t len, packet_t* packet);
  * @param topic topic of the data
  * @param data data of the packet
  * @param dest destination address
+ * @param mobile_flags mobile flags
  */
-void build_data_header(data_packet_t* data_packet, uint8_t up, uint8_t multicast_group, uint16_t len_topic, uint16_t len_data, char* topic, char* data, linkaddr_t* dest);
+void build_data_header(data_packet_t* data_packet, uint8_t up, uint8_t multicast_group, uint16_t len_topic, uint16_t len_data, char* topic, char* data, linkaddr_t* dest, uint8_t mobile_flags);
+
+/**
+ * @brief Pack the data packet
+ * 
+ * @param data_packet data packet pointer
+ * @param data data of the packet
+ */
+void packing_data_packet(data_packet_t* data_packet, uint8_t* data);
 
 /**
  * @brief Process the data header of a packet
@@ -275,8 +292,9 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
  * @param data data of the packet
  * @param dest destination address
  * @param ack ack flag
+ * @param mobile_flags mobile flags
  */
-void send_data_packet(uint8_t up, uint8_t multicast_group, uint16_t len_topic, uint16_t len_data, char* topic, char* data, linkaddr_t* dest, uint8_t ack);
+void send_data_packet(uint8_t up, uint8_t multicast_group, uint16_t len_topic, uint16_t len_data, char* topic, char* input_data, linkaddr_t* dest, uint8_t ack, uint8_t mobile_flags);
 
 /**
  * @brief Forward a data packet to the parent node
@@ -395,6 +413,17 @@ void process_data_ack(const uint8_t* data, linkaddr_t* src);
 */
 void process_gateway_packet(const void *data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type, linkaddr_t* barns, int* barns_size);
 
+/**
+ * @brief Process a packet and determine its type, if it is a control
+ *       packet, it will process it
+ * @param data packet data
+ * @param len packet length
+ * @param src source address
+ * @param dest destination address
+ * @param packet_type packet type pointer to store the type of the packet
+ * @param parent parent node
+*/
+void process_mobile_packet(const void *data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type, parent_t* parent);
 /*---------------------------------------------------------------------------*/
 /* Debug functions */
 
