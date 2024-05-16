@@ -59,7 +59,6 @@ void input_callback(const void *data, uint16_t len,
   if (packet_type == DATA) {
     data_packet_t packet_data;
     process_data_packet(data, len, &packet_data);
-    //if (!strcmp(packet_data.topic, "keepalive")){
       char *stringToReturn = malloc(sizeof(char) * 20);
       int barnNb;
       for (barnNb = 0; barnNb < barns_size; barnNb++) {
@@ -70,12 +69,10 @@ void input_callback(const void *data, uint16_t len,
       sprintf(stringToReturn, "/%u/%s/=%s", barnNb, packet_data.topic, packet_data.data);
       printf("%s\n", stringToReturn);
       free(stringToReturn);
+
       /* /!\ freeing topic and data */
       free(packet_data.topic);
       free(packet_data.data);
-    //}
-    //sprintf(dest, string, value);
-
   } 
 }
 

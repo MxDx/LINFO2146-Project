@@ -61,7 +61,7 @@
 #define LIGHT_BULB_GROUP 0b0001
 #define IRRIGATION_GROUP 0b0010
 
-#define UNACK_TRESH 1
+#define UNACK_TRESH 2
 
 typedef struct {
     linkaddr_t addr;
