@@ -69,8 +69,7 @@ void input_callback(const void *data, uint16_t len,
         }
       }
       barnNb--;
-      LOG_INFO("pute : %s\n", packet_data.topic);
-      sprintf(stringToReturn, "/%u/%s", barnNb, packet_data.topic);
+      sprintf(stringToReturn, "/%u/%s/=%s", barnNb, packet_data.topic, packet_data.data);
       LOG_INFO("received data from subject : %s\n", stringToReturn);
       free(stringToReturn);
       /* /!\ freeing topic and data */
