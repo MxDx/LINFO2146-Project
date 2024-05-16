@@ -9,18 +9,49 @@
 #include "dev/cc2420.h"
 #include "sys/log.h"
 
+/* TYPE */
 #define DATA 1
 #define CONTROL 0
 
+/* NODE TYPE */
 #define GATEWAY 0b10
 #define SUB_GATEWAY 0b01
 #define NODE 0b00
 
+/* RESPONSE TYPE */
 #define SETUP 0b000
 #define RESPONSE 0b001
 #define SETUP_ACK 0b010
 #define DATA_ACK 0b011
 #define CHILD_RM 0b100
+
+/* 
+    Packet structure:
+    [ src ] [dest] [packet] 
+
+*/
+
+/* 
+    Control packet structure:
+    [ src ] [dest] 
+    [type (1b)] [node_type (2b)] [response_type (3b)] [ empty (2b) ] 
+    [data] 
+
+*/
+
+/* 
+    Data packet structure:
+    [ src ] [dest] 
+    [type (1b)] [ up (1b) ] [ multicast group (4b) ] [ empty (2b) ]
+    [len_topic (16b)] [len_data (16b)] 
+    [topic] [data] 
+
+*/
+
+#define LEN_HEADER 2*sizeof(linkaddr_t)
+#define LEN_CONTROL_HEADER sizeof(uint8_t)
+#define LEN_DATA_HEADER sizeof(uint8_t) + 2*sizeof(uint16_t)
+
 
 #define UNACK_TRESH 1
 

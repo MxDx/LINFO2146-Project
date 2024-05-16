@@ -27,7 +27,6 @@ void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, p
 
   // Sending setup ack to the parent
   LOG_INFO("Sending setup ack control packet\n");
-  LOG_INFO("Node type: %u\n", node_type);
   uint8_t data[sizeof(linkaddr_t) + 1];
   data[0] = node_type;
   memcpy(data + 1, &linkaddr_node_addr, sizeof(linkaddr_t));
@@ -46,7 +45,6 @@ void set_child(const linkaddr_t* src, uint8_t* data) {
   if (old_index != -1) {
     /* Update if nexthop is different or nexthop is not the addr itself */
     if (!linkaddr_cmp(&old_nexthop, src) && !linkaddr_cmp(&old_nexthop, &new_child.addr)) {
-      LOG_INFO("TODO : send remove signal here\n");
       control_packet_send(0, &old_nexthop, CHILD_RM, sizeof(linkaddr_t), &new_child.addr);
     }
     children[old_index] = new_child;
@@ -133,7 +131,7 @@ void packing_packet(uint8_t* output, linkaddr_t* src, linkaddr_t* dest, uint8_t*
   memcpy(output + sizeof(linkaddr_t), dest, sizeof(linkaddr_t));
 
   /* Adding the packet */
-  memcpy(output + 2*sizeof(linkaddr_t), packet, len_packet);
+  memcpy(output + LEN_HEADER, packet, len_packet);
 }
 
 void process_packet(const uint8_t* input_data, uint16_t len, packet_t* packet) {
@@ -227,11 +225,11 @@ void send_data_packet(uint16_t len_topic, uint16_t len_data, char* topic, char* 
   uint8_t data[len_data + len_topic + 4];
   packing_data_packet(&data_packet, data);
 
-  uint8_t output[len_data + len_topic + 4 + 2*sizeof(linkaddr_t)];
+  uint8_t output[len_data + len_topic + 4 + LEN_HEADER];
   packing_packet(output, &linkaddr_node_addr, &parent->parent_addr, data, len_topic + len_data + 4 + 2*sizeof(linkaddr_t));
 
   nullnet_buf = output;
-  nullnet_len = 2*sizeof(linkaddr_t) + 4 + len_topic + len_data;
+  nullnet_len = LEN_HEADER + 4 + len_topic + len_data;
 
   const linkaddr_t dest = parent->parent_addr;
   LOG_INFO("Sending data packet to: ");
@@ -296,7 +294,7 @@ void packing_control_packet(control_packet_t* control_packet, uint8_t* data, uin
   data[0] |= control_packet->header->response_type << 2;
 
   /* Adding the data */
-  memcpy(data + 1, control_packet->data, len_of_data);
+  memcpy(data + LEN_CONTROL_HEADER, control_packet->data, len_of_data);
 }
 
 void process_control_header(const uint8_t *data, uint16_t len, control_header_t* control_header) {
