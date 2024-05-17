@@ -83,13 +83,20 @@ void striping_data(char* message, char* barn_number, char* topic, char* data) {
 }
 
 void decide_action(char* topic, char* data, uint8_t barn_number) {
+  LOG_INFO("Topic: %s\n", topic);
+  LOG_INFO("Data: %s\n", data);
+  LOG_INFO("Barn number: %d\n", barn_number);
   if (strcmp(topic, "lights") == 0) {
-    send_data_packet(0, LIGHT_BULB_GROUP, strlen(topic), strlen(data), topic, data, &barns[barn_number], 0);
+    send_data_packet(0, LIGHT_BULB_GROUP, strlen(topic), strlen(data), topic, data, &barns[barn_number], 0, NOT_MOBILE);
   }
 
   if (strcmp(topic, "irrigation") == 0) {
-    for (int i = 0; i < barns_size; i++) {
-      send_data_packet(0, IRRIGATION_GROUP, strlen(topic), strlen(data), topic, data, &barns[i], 0);
+    if (barn_number == 255) {
+      for (int i = 0; i < barns_size; i++) {
+        send_data_packet(0, IRRIGATION_GROUP, strlen(topic), strlen(data), topic, data, &barns[i], 0, NOT_MOBILE);
+      }
+    } else {
+      send_data_packet(0, IRRIGATION_GROUP, strlen(topic), strlen(data), topic, data, &barns[barn_number], 0, NOT_MOBILE);
     }
   }
 }
@@ -126,7 +133,7 @@ PROCESS_THREAD(gateway_process, ev, data)
       char* topic = strtok(NULL, "/=");
       char* data = strtok(NULL, "/=");
 
-      uint8_t barn_number_int = atoi(barn_number);
+      int barn_number_int = atoi(barn_number);
 
       decide_action(topic, data, barn_number_int);
     }

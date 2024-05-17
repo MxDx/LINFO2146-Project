@@ -72,7 +72,7 @@ void input_callback(const void *data, uint16_t len,
       // size of maximum int is 11 + 1 for the '\0'
       char* data = malloc(12 + 4);
       sprintf(data, "time:%d", irrigation_time);
-      send_data_packet(1, UNICAST_GROUP, strlen(topic), strlen(data), topic, data, &parent.parent_addr, 0);
+      send_data_packet(1, UNICAST_GROUP, strlen(topic), strlen(data), topic, data, &parent.parent_addr, 1, NOT_MOBILE);
       ctimer_set(&irrigation_timer, irrigation_time * CLOCK_SECOND, timer_callback, NULL);
       free(data);
     }

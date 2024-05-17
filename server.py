@@ -6,9 +6,11 @@ import paho.mqtt.client as mqtt_client
 
 # Global variables
 irrigation_time = 5         # Time in seconds
-light_treshold = 100        # Light treshold
+light_treshold = 240        # Light treshold
 irrigation_every = 60       # Time in seconds
+time_on = 1                 # Time in minutes
 
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 def process_gateway_data(data, mqttc=None):
     # /barn_number/topic/=payload\n
@@ -24,6 +26,12 @@ def process_gateway_data(data, mqttc=None):
         if (topic == "keep_alive"):
             return
         print(f"/{barn_number}/{topic}/={payload}")
+        if (topic == "light"):
+            light_value = int(payload)
+            if (light_value > light_treshold):
+                print(f"Turning on lights in barn {barn_number} for {time_on} minutes")
+                sock.send(f"/{barn_number}/lights/=on?{time_on}\n".encode("utf-8"))
+            
 
 def recv(sock):
     data = sock.recv(1)
@@ -34,7 +42,6 @@ def recv(sock):
     return buf
 
 def main(ip, port, mqtt):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((ip, port))
 
     # The callback for when the client receives a CONNACK response from the server.
@@ -64,7 +71,7 @@ def main(ip, port, mqtt):
     while True: 
         if time.time() - start_time > irrigation_every:
             print(f"Sending irrigation time: {irrigation_time}")
-            sock.send(f"/0/irrigation/={irrigation_time}\n".encode("utf-8"))
+            sock.send(f"/-1/irrigation/={irrigation_time}\n".encode("utf-8"))
             start_time = time.time()
         data = recv(sock)
         if mqtt:

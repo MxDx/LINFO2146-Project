@@ -22,8 +22,14 @@ PROCESS(node_process, "Node process");
 AUTOSTART_PROCESSES(&node_process);
 
 parent_t parent;
+static struct ctimer periodic_timer;
 
 /*---------------------------------------------------------------------------*/
+void turn_off_light_bulb() {
+  LOG_INFO("Turning off light bulb\n");
+  leds_off(LEDS_RED);
+}
+
 void input_callback(const void *data, uint16_t len,
   const linkaddr_t *src, const linkaddr_t *dest)
 {
@@ -61,6 +67,16 @@ void input_callback(const void *data, uint16_t len,
     } else if (strcmp(data_packet.data, "off") == 0) {
       leds_off(LEDS_RED);
       LOG_INFO("Turning off light bulb\n");
+    } else {
+      /* data -> on?time_in_min */
+      char *token = strtok(data_packet.data, "?");
+      if (strcmp(token, "on") == 0) {
+        token = strtok(NULL, "?");
+        int time_in_min = atoi(token);
+        LOG_INFO("Turning on light bulb for %d minutes\n", time_in_min);
+        leds_on(LEDS_RED);
+        ctimer_set(&periodic_timer, time_in_min * 60 * CLOCK_SECOND, turn_off_light_bulb, NULL);
+      }
     }
     
     /* /!\ Freeing the topic and data */
