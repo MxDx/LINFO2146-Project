@@ -1,4 +1,4 @@
-CONTIKI_PROJECT = gateway node sub-gateway node-light-sensor irrigation-valve light-bulb
+CONTIKI_PROJECT = gateway node sub-gateway node-light-sensor irrigation-valve light-bulb mobile
 all: $(CONTIKI_PROJECT)
 
 MODULES_REL += ./routing

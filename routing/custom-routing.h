@@ -157,8 +157,8 @@ static linkaddr_t null_addr =         {{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0
  * @brief Set the parent address
  * 
  * @param parent_addr parent address
- * @param rssi signal strength
  * @param type type of the parent node
+ * @param rssi signal strength
  * @param parent parent node
  * @param node_type type of the node
  * @param multicast_group multicast group
@@ -286,6 +286,8 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
 /**
  * @brief Send a data packet to the parent node
  * 
+ * @param up up flag
+ * @param multicast_group multicast group
  * @param len_topic length of the topic
  * @param len_data length of the data
  * @param topic topic of the data
@@ -348,6 +350,7 @@ void process_control_header(const uint8_t *data, uint16_t len, control_header_t*
  * @param dest destination address
  * @param response_type type of the response
  * @param len_of_data length of the data
+ * @param control_data data of the packet
  */
 void control_packet_send(uint8_t node_type, linkaddr_t* dest, uint8_t response_type, uint16_t len_of_data, void* control_data); 
 
@@ -357,8 +360,6 @@ void control_packet_send(uint8_t node_type, linkaddr_t* dest, uint8_t response_t
  * 
  * @param src source address
  * @param node_type type of the node
- * @param parent_addr current parent node
- * @param setup setup flag
  * @param parent parent node
  * @param multicast_group multicast group
  */
