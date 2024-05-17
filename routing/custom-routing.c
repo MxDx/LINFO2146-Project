@@ -619,7 +619,7 @@ void process_sub_gateway_packet(const uint8_t* data, uint16_t len, linkaddr_t *s
       return;
     }
 
-    if (!not_setup() && header.response_type == SETUP) {
+    if (!not_setup() && header.response_type == SETUP && header.node_type != SUB_GATEWAY) {
       LOG_INFO("Sending back a control packet\n");
       control_packet_send(SUB_GATEWAY, src, RESPONSE, 0, NULL);
       return;
