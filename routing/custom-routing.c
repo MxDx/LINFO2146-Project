@@ -378,7 +378,9 @@ void packing_control_packet(control_packet_t* control_packet, uint8_t* data, uin
   data[0] |= control_packet->header->response_type << 2;
 
   /* Adding the data */
-  memcpy(data + LEN_CONTROL_HEADER, control_packet->data, len_of_data);
+  if (len_of_data > 0) {
+    memcpy(data + LEN_CONTROL_HEADER, control_packet->data, len_of_data);
+  }
 }
 
 void process_control_header(const uint8_t *data, uint16_t len, control_header_t* control_header) {
@@ -425,19 +427,21 @@ void control_packet_send(uint8_t node_type, linkaddr_t* dest, uint8_t response_t
   control_packet.header = &header;
   control_packet.data = control_data;
 
+  LOG_INFO("Size of data: %u\n", len_of_data + LEN_CONTROL_HEADER);
   uint8_t data[LEN_CONTROL_HEADER + len_of_data];
   packing_control_packet(&control_packet, data, len_of_data);
 
+  LOG_INFO("Size of output: %u\n", LEN_HEADER + LEN_CONTROL_HEADER + len_of_data);
   uint8_t output[LEN_HEADER + LEN_CONTROL_HEADER + len_of_data];
   if (dest == NULL) {
-    packing_packet(output, &linkaddr_node_addr, &null_addr, data, len_of_data + LEN_CONTROL_HEADER + LEN_HEADER);
+    packing_packet(output, &linkaddr_node_addr, &null_addr, data, len_of_data + LEN_CONTROL_HEADER);
   } else {
-    packing_packet(output, &linkaddr_node_addr, dest, data, len_of_data + LEN_CONTROL_HEADER + LEN_HEADER);
+    packing_packet(output, &linkaddr_node_addr, dest, data, len_of_data + LEN_CONTROL_HEADER);
   }
 
   // memcpy(nullnet_buf, packet_space, 2*sizeof(linkaddr_t) + len_of_data + 1);
   nullnet_buf = output;
-  nullnet_len = sizeof(linkaddr_t)*2 + len_of_data + 1;
+  nullnet_len = LEN_HEADER + LEN_CONTROL_HEADER + len_of_data;
 
   LOG_INFO("Sending control packet to: ");
   LOG_INFO_LLADDR(dest);
