@@ -101,7 +101,7 @@ PROCESS_THREAD(mobile_process, ev, data)
     etimer_set(&periodic_timer, KEEP_ALIVE_INTERVAL);
   
     LOG_INFO("Running....\n");
-    keep_alive(&parent, "mobile");
+    keep_alive(&parent, "mob");
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
   }
   LOG_INFO("Node process ended\n");
