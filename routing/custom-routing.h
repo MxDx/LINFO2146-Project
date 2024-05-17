@@ -49,7 +49,7 @@
 /* 
     Data packet structure:
     [ src ] [ dest ] 
-    [type (1b)] [ up (1b) ] [ multicast group (4b) ] [ empty (2b) ]
+    [type (1b)] [ up (1b) ] [ multicast group (4b) ] [ Mobile comm (2b) ]
     [len_topic (16b)] [len_data (16b)] 
     [ dest (sizeof(linkaddr) or 0) ]
     [topic] [data] 
