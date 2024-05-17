@@ -49,19 +49,12 @@ void input_callback(const void *data, uint16_t len,
   uint8_t packet_type;
   process_mobile_packet(data, len, &packet.src, &packet.dest, &packet_type, &parent);
   LOG_INFO("Received packet\n");
-
-  //if (packet_type == DATA) {
-  //}
 }
 
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(mobile_process, ev, data)
 {
   static struct etimer periodic_timer;
-  // if (node_type == NULL) {
-  //   node_type = malloc(sizeof(uint8_t));
-  //   *node_type = NODE;
-  // }
 
   setup = 0;
   type_parent = NODE;
@@ -101,7 +94,7 @@ PROCESS_THREAD(mobile_process, ev, data)
     etimer_set(&periodic_timer, KEEP_ALIVE_INTERVAL);
   
     LOG_INFO("Running....\n");
-    keep_alive(&parent, "mobile");
+    keep_alive(&parent, "mob");
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
   }
   LOG_INFO("Node process ended\n");

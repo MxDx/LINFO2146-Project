@@ -19,17 +19,9 @@ void set_parent(const linkaddr_t* parent_addr, uint8_t type, signed char rssi, p
   parent->type = type;
   parent->rssi = rssi;
 
-  LOG_INFO("Parent address: ");
-  LOG_INFO_LLADDR(&parent->parent_addr);
-  LOG_INFO_("\n");
-  LOG_INFO("Parent type: %u\n", type);
-  LOG_INFO("Parent rssi: %d\n", rssi);
-
   // Sending setup ack to the parent
-  LOG_INFO("Sending setup ack control packet\n");
   uint8_t data[sizeof(linkaddr_t) + 1];
   data[0] = multicast_group;
-  LOG_INFO("Multicast group: %u\n", data[0]);
   memcpy(data + 1, &linkaddr_node_addr, sizeof(linkaddr_t));
   control_packet_send(node_type, &parent->parent_addr, SETUP_ACK, sizeof(linkaddr_t) + 1, data);
 }
@@ -107,26 +99,14 @@ uint8_t not_setup() {
 }
 
 void init_node() {
-  LOG_INFO("Sending setup control packet (node)\n");
-  LOG_INFO("To: ");
-  LOG_INFO_LLADDR(NULL);
-  LOG_INFO_("\n");
   control_packet_send(NODE, NULL, SETUP, 0, NULL);
 }
 
 void init_sub_gateway() {
-  LOG_INFO("Sending setup control packet (sub-gateway)\n");
-  LOG_INFO("To: ");
-  LOG_INFO_LLADDR(NULL);
-  LOG_INFO_("\n");
   control_packet_send(SUB_GATEWAY, NULL, SETUP, 0, NULL);
 }
 
 void init_gateway() {
-  LOG_INFO("Sending setup control packet (gateway)\n");
-  LOG_INFO("To: ");
-  LOG_INFO_LLADDR(NULL);
-  LOG_INFO_("\n");
   control_packet_send(GATEWAY, NULL, SETUP, 0, NULL);
 }
 /*---------------------------------------------------------------------------*/
@@ -216,10 +196,6 @@ void process_data_packet(const uint8_t *input_data, uint16_t len, data_packet_t*
   memcpy(&header.len_topic, input_data + LEN_HEADER + 1, sizeof(uint16_t));
   memcpy(&header.len_data, input_data + LEN_HEADER + 3, sizeof(uint16_t));
 
-  LOG_INFO("Len topic: %u\n", header.len_topic);
-  LOG_INFO("Len data: %u\n", header.len_data);
-  LOG_INFO("Mobile flags: %u\n", header.mobile_flags);
-
   uint8_t offset = 0;
   if (header.up == 0) {
     header.dest = *((linkaddr_t*)(input_data + LEN_HEADER + LEN_DATA_HEADER));
@@ -277,7 +253,6 @@ void send_data_packet(uint8_t up, uint8_t multicast_group, uint16_t len_topic, u
   LOG_INFO_("\n");
   NETSTACK_NETWORK.output(&nexthop);
 
-  LOG_INFO("Data counter value at send: %u \n", data_counter);
   if (!ack) {
     return;
   }
@@ -349,7 +324,6 @@ void forward_data_packet(const void *data, uint16_t len, parent_t* parent) {
       }
       start_index = get_multicast_children(data_packet.header.multicast_group, &nexthop, start_index + 1);
     }
-    LOG_INFO("Start index: %d\n", start_index);
   }  
 }
 
@@ -400,7 +374,6 @@ void process_data_ack(const uint8_t* data, linkaddr_t* src){
   if (linkaddr_cmp(&dest, &linkaddr_node_addr)){
     LOG_INFO("Ack reached destination\n");
     data_counter--;
-    LOG_INFO("Counter value %u\n", data_counter);
     return;
   }
   linkaddr_t nexthop;
@@ -427,11 +400,9 @@ void control_packet_send(uint8_t node_type, linkaddr_t* dest, uint8_t response_t
   control_packet.header = &header;
   control_packet.data = control_data;
 
-  LOG_INFO("Size of data: %u\n", len_of_data + LEN_CONTROL_HEADER);
   uint8_t data[LEN_CONTROL_HEADER + len_of_data];
   packing_control_packet(&control_packet, data, len_of_data);
 
-  LOG_INFO("Size of output: %u\n", LEN_HEADER + LEN_CONTROL_HEADER + len_of_data);
   uint8_t output[LEN_HEADER + LEN_CONTROL_HEADER + len_of_data];
   if (dest == NULL) {
     packing_packet(output, &linkaddr_node_addr, &null_addr, data, len_of_data + LEN_CONTROL_HEADER);
@@ -495,7 +466,6 @@ void check_parent_node(const linkaddr_t* src, uint8_t node_type, parent_t* paren
 void check_parent_sub_gateway(const linkaddr_t* src, uint8_t node_type, parent_t* parent) {
   /* Create new possible parent */
   signed char rssi = cc2420_last_rssi;
-  LOG_INFO("type_parent: %u\n", type_parent);
 
   if (node_type != GATEWAY) {
     LOG_INFO("Ignoring not a gateway\n");
@@ -534,7 +504,6 @@ void process_node_packet(const void *data, uint16_t len, linkaddr_t *src, linkad
 
   uint8_t head = ((uint8_t *)data_strip)[0];
   *packet_type = head >> 7;
-  LOG_INFO("Packet type: %u\n", *packet_type);
 
   if (*packet_type == CONTROL) {
     LOG_INFO("Received control packet\n");
@@ -579,12 +548,8 @@ void process_node_packet(const void *data, uint16_t len, linkaddr_t *src, linkad
       /* Forwarding child to gateway */
       send_child(new_child, NODE, parent);
 
-      LOG_INFO("Received setup ack control packet\n");
-      LOG_INFO("New children at address: ");
+      LOG_INFO("Received setup ack control packet new children at address: ");
       LOG_INFO_LLADDR(&new_child.addr);
-      LOG_INFO("\n");
-      LOG_INFO("From: ");
-      LOG_INFO_LLADDR(&new_child.from);
       LOG_INFO("\n");
       return;
     }
@@ -609,7 +574,6 @@ void process_node_packet(const void *data, uint16_t len, linkaddr_t *src, linkad
 }
 
 void process_sub_gateway_packet(const uint8_t* data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type, parent_t* parent) {
-  LOG_INFO("Processing sub gateway packet\n");
   if (len == 0) {
     LOG_INFO("Empty packet\n");
     return;
@@ -633,12 +597,8 @@ void process_sub_gateway_packet(const uint8_t* data, uint16_t len, linkaddr_t *s
       /* Forwarding child to gateway */
       send_child(new_child, SUB_GATEWAY, parent);
 
-      LOG_INFO("Received setup ack control packet\n");
-      LOG_INFO("New children at address: ");
+      LOG_INFO("Received setup ack control packet new children at address: ");
       LOG_INFO_LLADDR(&new_child.addr);
-      LOG_INFO("\n");
-      LOG_INFO("From: ");
-      LOG_INFO_LLADDR(&new_child.from);
       LOG_INFO("\n");
       return;
     }
@@ -712,7 +672,6 @@ void process_sub_gateway_packet(const uint8_t* data, uint16_t len, linkaddr_t *s
 }
 
 void process_gateway_packet(const void *data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type, linkaddr_t* barns, int* barns_size) {
-  LOG_INFO("Processing gateway packet\n");
   if (len == 0) {
     LOG_INFO("Empty packet\n");
     return;
@@ -785,7 +744,6 @@ void process_gateway_packet(const void *data, uint16_t len, linkaddr_t *src, lin
 
 
 void process_mobile_packet(const void *data, uint16_t len, linkaddr_t *src, linkaddr_t *dest, uint8_t* packet_type, parent_t* parent) {
-  LOG_INFO("Processing mobile packet\n");
   if (len == 0) {
     LOG_INFO("Empty packet\n");
     return;
@@ -833,12 +791,8 @@ void process_mobile_packet(const void *data, uint16_t len, linkaddr_t *src, link
       /* Forwarding child to gateway */
       send_child(new_child, NODE, parent);
 
-      LOG_INFO("Received setup ack control packet\n");
-      LOG_INFO("New children at address: ");
+      LOG_INFO("Received setup ack control packet new children at address: ");
       LOG_INFO_LLADDR(&new_child.addr);
-      LOG_INFO("\n");
-      LOG_INFO("From: ");
-      LOG_INFO_LLADDR(&new_child.from);
       LOG_INFO("\n");
       return;
     }
@@ -857,7 +811,6 @@ void process_mobile_packet(const void *data, uint16_t len, linkaddr_t *src, link
   }
 
   if (*packet_type == DATA) {
-    forward_data_packet(data, len, parent);
     data_packet_t data_packet;
     process_data_packet(data, len, &data_packet);
     print_data_packet(&data_packet);
