@@ -425,14 +425,14 @@ void control_packet_send(uint8_t node_type, linkaddr_t* dest, uint8_t response_t
   control_packet.header = &header;
   control_packet.data = control_data;
 
-  uint8_t data[8];
+  uint8_t data[LEN_CONTROL_HEADER + len_of_data];
   packing_control_packet(&control_packet, data, len_of_data);
 
-  uint8_t output[16];
+  uint8_t output[LEN_HEADER + LEN_CONTROL_HEADER + len_of_data];
   if (dest == NULL) {
-    packing_packet(output, &linkaddr_node_addr, &null_addr, data, len_of_data + 1 + 2*sizeof(linkaddr_t));
+    packing_packet(output, &linkaddr_node_addr, &null_addr, data, len_of_data + LEN_CONTROL_HEADER + LEN_HEADER);
   } else {
-    packing_packet(output, &linkaddr_node_addr, dest, data, len_of_data + 1 + 2*sizeof(linkaddr_t));
+    packing_packet(output, &linkaddr_node_addr, dest, data, len_of_data + LEN_CONTROL_HEADER + LEN_HEADER);
   }
 
   // memcpy(nullnet_buf, packet_space, 2*sizeof(linkaddr_t) + len_of_data + 1);
